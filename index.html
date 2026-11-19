@@ -1,0 +1,2167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>자산 이체·환전 & P_일지 매매기록 통합 대시보드</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Firebase Realtime Database SDK (Compat v10) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- Google Fonts: Inter & Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 14px;
+      width: 14px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #e2e8f0;
+      border-radius: 7px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 7px;
+      border: 2px solid #e2e8f0;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+    @media (min-width: 768px) {
+      .sticky-col-1 { position: sticky; left: 0; z-index: 10; }
+      .sticky-col-2 { position: sticky; left: 72px; z-index: 10; }
+      .sticky-col-3 { position: sticky; left: 118px; z-index: 10; }
+      .sticky-col-4 { position: sticky; left: 162px; z-index: 10; }
+    }
+    .excel-grid-box {
+      border: 2px solid #0f172a;
+      background-color: #ffffff;
+      box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.08);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- 알림 토스트 및 확인 모달 -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <h3 id="confirm-title" class="text-lg font-bold text-slate-900">확인</h3>
+      </div>
+      <p id="confirm-message" class="text-sm text-slate-600 leading-relaxed mb-6">진행하시겠습니까?</p>
+      <div class="flex justify-end gap-2">
+        <button id="confirm-cancel-btn" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">취소</button>
+        <button id="confirm-ok-btn" class="px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 transition">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상단 글로벌 헤더 -->
+  <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-[1480px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-inner shrink-0">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">개인 자산 · 환전 & P_일지 투자현황 대시보드</h1>
+              <span id="cloud-sync-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <span id="cloud-sync-dot" class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="cloud-sync-text">클라우드 연결 중...</span>
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">Firebase 실시간 동기화(PC·모바일 자동 연동) · JSON 백업/복원 지원</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="forcePushToCloud()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-indigo-900/70 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 transition">
+            <svg class="w-3.5 h-3.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            클라우드 즉시 동기화
+          </button>
+          <button onclick="exportJSON()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            JSON 백업
+          </button>
+          <label class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            JSON 불러오기
+            <input type="file" id="json-import-input" accept=".json" class="hidden" onchange="importJSON(event)" />
+          </label>
+          <button onclick="confirmResetAll()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 border border-rose-800/60 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            초기값 리셋
+          </button>
+        </div>
+      </div>
+
+      <nav class="flex gap-2 mt-4 pt-3 border-t border-slate-800/80 overflow-x-auto">
+        <button id="tab-btn-fx" onclick="switchMainTab('fx')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-indigo-600 text-white shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>이체 및 환전 내역서</span>
+          <span id="badge-fx-count" class="px-2 py-0.5 text-xs rounded-full bg-white/20 text-white">19</span>
+        </button>
+        <button id="tab-btn-journal" onclick="switchMainTab('journal')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          <span>P</span>
+          <span id="badge-journal-count" class="px-2 py-0.5 text-xs rounded-full bg-slate-700 text-slate-300">142</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- 메인 콘텐츠 -->
+  <main class="flex-1 max-w-[1480px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-x-hidden">
+
+    <!-- 탭 1: 이체 및 환전 내역서 -->
+    <section id="section-fx" class="space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1.5">
+            <span>총 원화 이체·환전 합계 (KRW)</span>
+            <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">원화</span>
+          </div>
+          <div id="fx-total-krw" class="text-2xl font-bold text-slate-900">₩65,247,966</div>
+          <p id="fx-date-range" class="text-xs text-slate-400 mt-1.5">2026-07-03 ~ 2026-11-05</p>
+        </div>
+
+        <div class="sm:col-span-2 lg:col-span-2 bg-white rounded-2xl p-5 border border-indigo-200 bg-indigo-50/30 shadow-xs flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs font-semibold text-indigo-900 mb-1.5">
+            <span>총 외화 합계 (환전 + 외화이체)</span>
+            <span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">USD</span>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 my-1">
+            <div id="fx-total-usd" class="text-2xl sm:text-3xl font-bold text-indigo-700">$59,206.22</div>
+            <div class="flex flex-wrap items-center gap-2.5 text-sm sm:text-base">
+              <span class="text-slate-700 font-semibold">
+                원화 환산: <strong id="fx-usd-to-krw-val" class="text-slate-900 font-extrabold">₩78,917,155</strong>
+              </span>
+              <span class="inline-flex items-center gap-1 text-indigo-800 font-bold bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs">
+                <span class="text-xs sm:text-sm">기준환율</span>
+                <input type="number" id="fx-today-rate" step="0.01" min="1" value="1332.92" oninput="handleFxRateChange()" class="w-20 px-1 py-0.5 text-right font-extrabold text-sm sm:text-base text-indigo-900 focus:outline-none" />
+                <span class="text-xs sm:text-sm">원</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1.5">
+            <span>환전 외화 소계 vs 외화이체 소계</span>
+            <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">구분별</span>
+          </div>
+          <div class="flex items-baseline justify-between mt-1">
+            <div>
+              <span class="text-[11px] text-slate-400 block">환전(매수)</span>
+              <span id="fx-sub-exchange" class="text-base font-bold text-blue-700">$40,454.52</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[11px] text-slate-400 block">외화이체</span>
+              <span id="fx-sub-transfer" class="text-base font-bold text-emerald-700">$18,751.70</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 이체/환전 입력 폼 -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs">
+        <div class="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
+          <h2 id="fx-form-title" class="text-sm font-bold text-slate-900">새 이체 · 환전 내역 추가</h2>
+          <button type="button" id="fx-cancel-edit-btn" onclick="cancelFxEdit()" class="hidden px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition">수정 취소</button>
+        </div>
+        <form id="fx-form" onsubmit="handleFxSubmit(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+          <input type="hidden" id="fx-edit-id" value="" />
+          <div>
+            <label for="fx-date" class="block text-xs font-semibold text-slate-700 mb-1">날짜 *</label>
+            <input type="date" id="fx-date" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label for="fx-type" class="block text-xs font-semibold text-slate-700 mb-1">구분 *</label>
+            <select id="fx-type" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:ring-2 focus:ring-indigo-500">
+              <option value="환전">환전</option>
+              <option value="외화이체">외화이체</option>
+              <option value="원화이체">원화이체</option>
+            </select>
+          </div>
+          <div>
+            <label for="fx-krw" class="block text-xs font-semibold text-slate-700 mb-1">원화 금액 (₩)</label>
+            <input type="number" id="fx-krw" step="1" min="0" placeholder="예: 1500000" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-right tabular-nums bg-white focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label for="fx-usd" class="block text-xs font-semibold text-slate-700 mb-1">외화 금액 ($)</label>
+            <input type="number" id="fx-usd" step="0.01" min="0" placeholder="예: 1125.54" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-right tabular-nums bg-white focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label for="fx-memo" class="block text-xs font-semibold text-slate-700 mb-1">비고 / 메모</label>
+            <input type="text" id="fx-memo" placeholder="예: 환전 (환율 1,332.70)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <button type="submit" id="fx-submit-btn" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition flex items-center justify-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span>추가</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 이체/환전 테이블 -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/70">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" data-filter="ALL" onclick="setFxTypeFilter('ALL')" class="fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white transition">전체</button>
+            <button type="button" data-filter="환전" onclick="setFxTypeFilter('환전')" class="fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">환전</button>
+            <button type="button" data-filter="외화이체" onclick="setFxTypeFilter('외화이체')" class="fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">외화이체</button>
+            <button type="button" data-filter="원화이체" onclick="setFxTypeFilter('원화이체')" class="fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">원화이체</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="fx-sort-order" onchange="renderFxTable()" class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800">
+              <option value="DESC">최신순</option>
+              <option value="ASC">과거순</option>
+            </select>
+            <select id="fx-month-filter" onchange="renderFxTable()" class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-700">
+              <option value="ALL">전체 월 보기</option>
+            </select>
+          </div>
+        </div>
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-900 text-white text-xs uppercase tracking-wider">
+                <th class="py-3 px-4 font-semibold text-center w-14 whitespace-nowrap">No.</th>
+                <th class="py-3 px-4 font-semibold whitespace-nowrap">날짜</th>
+                <th class="py-3 px-4 font-semibold text-right whitespace-nowrap">이체/매수내역 (₩)</th>
+                <th class="py-3 px-4 font-semibold text-right whitespace-nowrap">환전 및 이체내역 ($)</th>
+                <th class="py-3 px-4 font-semibold text-right hidden sm:table-cell whitespace-nowrap">적용환율</th>
+                <th class="py-3 px-4 font-semibold text-center whitespace-nowrap">구분</th>
+                <th class="py-3 px-4 font-semibold whitespace-nowrap">비고</th>
+                <th class="py-3 px-4 font-semibold text-center whitespace-nowrap">관리</th>
+              </tr>
+              <tr id="fx-table-top-summary" class="bg-indigo-50/90 text-slate-900 font-bold text-xs sm:text-sm border-b-2 border-indigo-200 tabular-nums"></tr>
+            </thead>
+            <tbody id="fx-table-body" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 탭 2: P -->
+    <section id="section-journal" class="hidden space-y-5">
+      <!-- 1. 일지 입력 폼 & 현황판 -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+        <div class="xl:col-span-7 bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200">
+            <div class="flex items-center gap-2">
+              <span class="w-1.5 h-4 rounded-full bg-indigo-600"></span>
+              <h3 id="j-form-title" class="text-sm font-bold text-slate-900">일지 입력 폼</h3>
+              <span class="text-[11px] text-slate-500">(1배수 기준)</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" onclick="setNextJournalDefaults()" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition">다음 거래일 세팅</button>
+              <button type="button" onclick="startNewCycleDefaults()" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition">새 사이클</button>
+              <button type="button" id="j-cancel-edit-btn" onclick="cancelJournalEdit()" class="hidden px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition">수정 취소</button>
+            </div>
+          </div>
+
+          <form id="journal-form" onsubmit="handleJournalSubmit(event)" class="space-y-2.5">
+            <input type="hidden" id="j-edit-index" value="-1" />
+            <div class="bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/80">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <div class="flex items-center justify-between mb-0.5">
+                    <label class="text-[11px] font-semibold text-slate-700">A.사이클 *</label>
+                    <span id="j-auto-day-badge" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 rounded">자동 35거래일</span>
+                  </div>
+                  <input type="number" id="j-col-a" required min="1" step="1" oninput="updateAutoDayBadge(); autoCalcJournalForm(false);" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-right font-bold tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">C.거래당일 *</label>
+                  <input type="date" id="j-col-c" required onchange="updateAutoDayBadge()" class="w-full px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">D.전날 *</label>
+                  <input type="date" id="j-col-d" required class="w-full px-1.5 py-1.5 rounded-lg border border-slate-300 text-xs tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-700 mb-0.5">E.전날종가($) *</label>
+                  <input type="number" id="j-col-e" required step="0.01" min="0" placeholder="0.00" oninput="autoCalcJournalForm()" class="w-full px-2 py-1.5 rounded-lg border border-slate-300 text-xs text-right font-semibold tabular-nums bg-white" />
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div class="bg-rose-50/60 p-2.5 rounded-xl border border-rose-200/80">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-bold text-rose-800">주문 매수 (F~I)</span>
+                  <span id="j-preview-buy-sum" class="text-[10px] font-semibold text-rose-700">0주</span>
+                </div>
+                <div class="space-y-1.5">
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <input type="number" id="j-col-f" step="0.01" min="0" placeholder="F.매수가1" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-rose-300 text-xs text-right tabular-nums bg-white" />
+                    <input type="number" id="j-col-g" step="1" min="0" placeholder="G.개수1" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-rose-300 text-xs text-right tabular-nums bg-white" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <input type="number" id="j-col-h" step="0.01" min="0" placeholder="H.매수가2" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-rose-300 text-xs text-right tabular-nums bg-white" />
+                    <input type="number" id="j-col-i" step="1" min="0" placeholder="I.개수2" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-rose-300 text-xs text-right tabular-nums bg-white" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-blue-50/60 p-2.5 rounded-xl border border-blue-200/80">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-bold text-blue-900">주문 매도 (J~O)</span>
+                  <span id="j-preview-sell-sum" class="text-[10px] font-semibold text-blue-800">0주</span>
+                </div>
+                <div class="space-y-1.5">
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <input type="number" id="j-col-j" step="0.01" min="0" placeholder="J.매도가1" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                    <input type="number" id="j-col-k" step="1" min="0" placeholder="K.개수1" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <input type="number" id="j-col-l" step="0.01" min="0" placeholder="L.매도가2" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                    <input type="number" id="j-col-m" step="1" min="0" placeholder="M.개수2" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <input type="number" id="j-col-n" step="0.01" min="0" placeholder="N.매도가3" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                    <input type="number" id="j-col-o" step="1" min="0" placeholder="O.개수3" oninput="autoCalcJournalForm()" class="w-full px-2 py-1 rounded border border-blue-300 text-xs text-right tabular-nums bg-white" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[11px] font-bold text-emerald-950">실제 체결 매수·매도 (U열 · 본전가 계산기 연동)</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <label class="block text-[10px] font-semibold text-rose-700 mb-0.5">실제 매수가 ($)</label>
+                  <input type="number" id="j-exec-buy-price" step="0.01" min="0" placeholder="공백 가능" oninput="autoCalcJournalForm()" class="w-full px-2 py-1.5 rounded-lg border border-rose-300 text-xs text-right font-semibold tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-rose-700 mb-0.5">실제 매수개수</label>
+                  <input type="number" id="j-exec-buy-qty" step="1" min="0" placeholder="공백 가능" oninput="autoCalcJournalForm()" class="w-full px-2 py-1.5 rounded-lg border border-rose-300 text-xs text-right font-semibold tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-blue-700 mb-0.5">실제 매도가 ($)</label>
+                  <input type="number" id="j-exec-sell-price" step="0.01" min="0" placeholder="공백 가능" oninput="autoCalcJournalForm()" class="w-full px-2 py-1.5 rounded-lg border border-blue-300 text-xs text-right font-semibold tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-blue-700 mb-0.5">실제 매도개수</label>
+                  <input type="number" id="j-exec-sell-qty" step="1" min="0" placeholder="공백 가능" oninput="autoCalcJournalForm()" class="w-full px-2 py-1.5 rounded-lg border border-blue-300 text-xs text-right font-semibold tabular-nums bg-white" />
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-200/80">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[11px] font-bold text-indigo-900">1배수 정산 (P~T)</span>
+                <button type="button" onclick="autoCalcJournalForm(true)" class="text-[10px] font-semibold text-indigo-700 hover:underline">자동계산</button>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div>
+                  <label class="block text-[10px] font-semibold text-slate-700 mb-0.5">P.잔금$</label>
+                  <input type="number" id="j-col-p" step="0.01" required class="w-full px-2 py-1.5 rounded border border-indigo-300 text-xs text-right font-bold text-emerald-700 tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-slate-700 mb-0.5">Q.평단$</label>
+                  <input type="number" id="j-col-q" step="0.001" min="0" required class="w-full px-2 py-1.5 rounded border border-indigo-300 text-xs text-right font-bold text-slate-900 tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-slate-700 mb-0.5">R.보유수</label>
+                  <input type="number" id="j-col-r" step="1" min="0" required class="w-full px-2 py-1.5 rounded border border-indigo-300 text-xs text-right font-bold text-slate-900 tabular-nums bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold text-slate-700 mb-0.5">S.실현수익</label>
+                  <input type="number" id="j-col-s" step="0.01" required class="w-full px-2 py-1.5 rounded border border-indigo-300 text-xs text-right font-bold text-rose-700 tabular-nums bg-white" />
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                  <label class="block text-[10px] font-semibold text-slate-700 mb-0.5">T.원금+수익</label>
+                  <input type="number" id="j-col-t" step="0.01" required class="w-full px-2 py-1.5 rounded border border-indigo-300 text-xs text-right font-bold text-indigo-700 tabular-nums bg-white" />
+                </div>
+              </div>
+              <div class="mt-2.5">
+                <button type="submit" id="j-submit-btn" class="w-full py-2 px-4 rounded-xl text-xs sm:text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition flex items-center justify-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                  <span>일지 추가</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- 현황판 -->
+        <div class="xl:col-span-5 bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-200">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="w-1.5 h-4 rounded-full bg-slate-900"></span>
+              <h2 class="text-sm font-bold text-slate-900">현황판</h2>
+              <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[11px] font-bold chart-mult-label">4배수</span>
+              <div class="flex items-center gap-1 ml-1">
+                <button type="button" onclick="setQuickMultiplier(1)" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 hover:bg-indigo-100 text-slate-700 transition">1배</button>
+                <button type="button" onclick="setQuickMultiplier(2)" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 hover:bg-indigo-100 text-slate-700 transition">2배</button>
+                <button type="button" onclick="setQuickMultiplier(3)" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 hover:bg-indigo-100 text-slate-700 transition">3배</button>
+                <button type="button" onclick="setQuickMultiplier(4)" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition">4배</button>
+                <button type="button" onclick="setQuickMultiplier(5)" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 hover:bg-indigo-100 text-slate-700 transition">5배</button>
+              </div>
+            </div>
+            <select id="snapshot-row-select" onchange="handleSnapshotSelect()" class="px-2 py-1 rounded-lg border border-slate-300 text-[11px] font-semibold text-slate-800 bg-slate-50 focus:outline-none">
+            </select>
+          </div>
+
+          <div class="overflow-x-auto">
+            <div class="excel-grid-box w-full text-xs tabular-nums select-none">
+              <div class="grid grid-cols-4 bg-[#14171a] text-white font-bold text-center border-b border-slate-900">
+                <div class="py-1.5 px-1.5">거래 날짜</div>
+                <div id="cap-trade-date" class="py-1.5 px-1.5 text-amber-200">2026/11/18</div>
+                <div id="cap-cycle-day" class="col-span-2 py-1.5 px-1.5">33차 &nbsp; 34거래일</div>
+              </div>
+
+              <div class="grid grid-cols-4 border-b-2 border-slate-900 text-center">
+                <div class="py-1.5 px-1.5 bg-slate-100 font-semibold text-slate-700 border-r border-slate-300">현사이클시작</div>
+                <div id="cap-cycle-start" class="py-1.5 px-1.5 bg-white font-bold text-slate-900 border-r border-slate-900">2026/10/02</div>
+                <div class="py-1.5 px-1.5 bg-slate-100 font-semibold text-slate-700 border-r border-slate-300">종가 날짜</div>
+                <div id="cap-close-date" class="py-1.5 px-1.5 bg-white font-bold text-blue-700">2026/11/17</div>
+              </div>
+
+              <div class="grid grid-cols-4 border-b-2 border-slate-900">
+                <div class="col-span-2 border-r-2 border-slate-900 flex flex-col">
+                  <div class="bg-[#000b66] text-white font-bold text-center py-1 border-b border-slate-900">Limit Vwap</div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b border-slate-900 bg-[#fdf3e7]">
+                    <div class="py-1 text-red-600 border-r border-slate-300">매수가</div>
+                    <div class="py-1 text-slate-900">개수</div>
+                  </div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b border-slate-300 bg-[#faf6ee]">
+                    <div id="cap-buy-p1" class="py-1.5 border-r border-slate-300 text-red-600">-</div>
+                    <div id="cap-buy-q1" class="py-1.5 text-red-600">-</div>
+                  </div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b-2 border-slate-900 bg-[#faf6ee]">
+                    <div id="cap-buy-p2" class="py-1.5 border-r border-slate-300 text-red-600">-</div>
+                    <div id="cap-buy-q2" class="py-1.5 text-red-600">-</div>
+                  </div>
+
+                  <div class="h-3 bg-white border-b-2 border-slate-900"></div>
+
+                  <div class="bg-[#000b66] text-white font-bold text-center py-1 border-b border-slate-900">Limit Vwap</div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b border-slate-900 bg-[#eaf2fa]">
+                    <div class="py-1 text-blue-700 border-r border-slate-300">매도가</div>
+                    <div class="py-1 text-slate-900">개수</div>
+                  </div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b border-slate-300 bg-[#e8f1fa]">
+                    <div id="cap-sell-p1" class="py-1.5 border-r border-slate-300 text-blue-700">57.95</div>
+                    <div id="cap-sell-q1" class="py-1.5 text-blue-700">32</div>
+                  </div>
+                  <div class="grid grid-cols-2 text-center font-bold border-b border-slate-300 bg-[#e8f1fa]">
+                    <div id="cap-sell-p2" class="py-1.5 border-r border-slate-300 text-blue-700">73.51</div>
+                    <div id="cap-sell-q2" class="py-1.5 text-blue-700">44</div>
+                  </div>
+                  <div class="grid grid-cols-2 text-center font-bold bg-[#e8f1fa] flex-1 items-center">
+                    <div id="cap-sell-p3" class="py-1.5 border-r border-slate-300 text-blue-700">50.59</div>
+                    <div id="cap-sell-q3" class="py-1.5 text-blue-700">24</div>
+                  </div>
+                </div>
+
+                <div class="col-span-2 flex flex-col divide-y divide-slate-300 text-center">
+                  <div class="grid grid-cols-2 items-center bg-white">
+                    <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">종가</div>
+                    <div id="cap-prev-close" class="py-1.5 px-1.5 font-bold text-blue-700">49.07</div>
+                  </div>
+                  <div class="grid grid-cols-2 items-center bg-[#fdf3e7]">
+                    <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">평단</div>
+                    <div id="cap-avg-price" class="py-1.5 px-1.5 font-bold text-slate-900">93.38</div>
+                  </div>
+                  <div class="grid grid-cols-2 items-center bg-[#e5f3df]">
+                    <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">현보유개수</div>
+                    <div id="cap-held-shares" class="py-1.5 px-1.5 font-bold text-slate-900">500</div>
+                  </div>
+                  <div class="grid grid-cols-2 items-center bg-[#e5f3df]">
+                    <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">잔금$</div>
+                    <div id="cap-cash" class="py-1.5 px-1.5 font-bold text-slate-900">38.00</div>
+                  </div>
+                  <div class="grid grid-cols-2 items-center bg-white">
+                    <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">잔금비율</div>
+                    <div id="cap-cash-ratio" class="py-1.5 px-1.5 font-bold text-slate-900">0.08%</div>
+                  </div>
+                  <div class="h-3.5 bg-white"></div>
+                  <div class="grid grid-cols-2 items-center bg-white flex-1">
+                    <div class="py-1.5 px-1 font-bold text-red-600 leading-tight border-r border-slate-300">현사이클<br/>실현수익</div>
+                    <div id="cap-cycle-profit" class="py-1.5 px-1.5 font-bold text-red-600">-11012.16</div>
+                  </div>
+                  <div class="grid grid-cols-2 items-center bg-white flex-1">
+                    <div class="py-1.5 px-1 font-bold text-red-600 border-r border-slate-300">원금+수익</div>
+                    <div id="cap-principal-plus-profit" class="py-1.5 px-1.5 font-bold text-red-600">16,726.16</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-4 items-center text-center bg-white">
+                <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">원금 $</div>
+                <div class="py-1 px-1 border-r border-slate-900">
+                  <input type="number" id="base-principal-input" step="100" min="1" value="10000" oninput="handleMultiplierChange()" class="w-full text-center font-bold text-slate-900 bg-slate-50 rounded py-0.5 border border-slate-200 focus:outline-none tabular-nums" />
+                </div>
+                <div class="py-1.5 px-1.5 font-semibold text-slate-800 border-r border-slate-300">내 배수</div>
+                <div class="py-1 px-1 flex items-center justify-center gap-1 bg-indigo-50/70">
+                  <button type="button" onclick="adjustMultiplier(-1)" class="w-5 h-5 rounded bg-white border border-indigo-200 text-indigo-700 font-bold hover:bg-indigo-100 flex items-center justify-center">−</button>
+                  <input type="number" id="my-multiplier-input" step="0.5" min="0.5" value="4" oninput="handleMultiplierChange()" class="w-10 text-center font-bold text-indigo-900 bg-white rounded py-0.5 border border-indigo-300 focus:outline-none tabular-nums" />
+                  <button type="button" onclick="adjustMultiplier(1)" class="w-5 h-5 rounded bg-white border border-indigo-200 text-indigo-700 font-bold hover:bg-indigo-100 flex items-center justify-center">+</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-800 flex items-center gap-1.5">
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-white text-[10px] font-bold shrink-0">U.체결</span>
+              <span id="cap-memo-text" class="truncate">최신 체결내역 표시</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 사이클별 성과 요약표 -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-slate-50/70">
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">사이클별 성과 요약표</h3>
+            <p class="text-xs text-slate-500 mt-1">9~33사이클 성과 데이터 요약</p>
+          </div>
+          <div class="flex items-center gap-2 self-start sm:self-center">
+            <select id="cycle-summary-sort" onchange="renderCycleSummaryTable()" class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800">
+              <option value="DESC">최신순 (33차→9차)</option>
+              <option value="ASC">과거순 (9차→33차)</option>
+            </select>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold">전 구간 요약</span>
+          </div>
+        </div>
+        <div class="overflow-x-auto overflow-y-auto max-h-[380px] custom-scrollbar">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-slate-900 text-white text-[11px] leading-tight tracking-tight">
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">사이클</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">사이클시작일</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">전체거래일</th>
+                <th colspan="4" class="py-1.5 px-2 font-semibold text-center whitespace-nowrap bg-slate-800/90 border-b border-r border-slate-700">해당 사이클의 SOXL</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">최저평단</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">최고평단</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">실현수익1배수</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap border-r border-slate-800">사이클수익률</th>
+                <th rowspan="2" class="py-2 px-2 font-semibold text-center align-middle whitespace-nowrap">누적수익률</th>
+              </tr>
+              <tr class="bg-slate-800 text-white text-[11px] leading-tight tracking-tight">
+                <th class="py-1.5 px-2 font-medium text-center text-slate-200 whitespace-nowrap border-r border-slate-700">시작가</th>
+                <th class="py-1.5 px-2 font-medium text-center text-slate-200 whitespace-nowrap border-r border-slate-700">종료가</th>
+                <th class="py-1.5 px-2 font-medium text-center text-sky-300 whitespace-nowrap border-r border-slate-700">최저가</th>
+                <th class="py-1.5 px-2 font-medium text-center text-indigo-300 whitespace-nowrap border-r border-slate-800">최고가</th>
+              </tr>
+            </thead>
+            <tbody id="cycle-summary-body" class="divide-y divide-slate-200 text-xs"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. 독립된 시각화 그래프 2종 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-stretch">
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs flex flex-col justify-between">
+          <div class="flex items-start justify-between gap-2 pb-3 mb-3 border-b border-slate-100">
+            <div>
+              <h3 class="text-sm sm:text-base font-bold text-slate-900">사이클별 실현수익(<span class="chart-mult-label">4배수</span> $) & 누적 수익률(%)</h3>
+              <p class="text-xs text-slate-500 mt-1">9사이클 ~ 최신 사이클 성과 추이 복합 차트</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold shrink-0">사이클 성과</span>
+          </div>
+          <div class="relative h-64 sm:h-72 w-full">
+            <canvas id="cycle-perf-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs flex flex-col justify-between">
+          <div class="flex flex-col gap-2.5 pb-3 mb-3 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <h3 class="text-sm sm:text-base font-bold text-slate-900">SOXL 종가 · 내 평단 · 잔금비율(%) 추이</h3>
+                <p class="text-xs text-slate-500 mt-1">SOXL 종가(검정) · 내 평단(노랑) · 잔금비율(파랑)</p>
+              </div>
+              <span id="soxl-chart-range-badge" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold shrink-0">9차 ~ 33차</span>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/80">
+              <div class="flex items-center gap-1.5">
+                <select id="soxl-chart-start-cycle" onchange="handleSoxlRangeChange('start')" aria-label="시작 사이클" class="px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold bg-white text-slate-800 focus:outline-none">
+                </select>
+                <span class="text-xs font-bold text-slate-500">~</span>
+                <select id="soxl-chart-end-cycle" onchange="handleSoxlRangeChange('end')" aria-label="종료 사이클" class="px-2 py-1.5 rounded-lg border border-slate-300 text-xs font-bold bg-white text-slate-800 focus:outline-none">
+                </select>
+              </div>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="setSoxlQuickRange('ALL')" class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-indigo-50 transition">전체</button>
+                <button type="button" onclick="setSoxlQuickRange('RECENT5')" class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-indigo-50 transition">최근 5차</button>
+                <button type="button" onclick="setSoxlQuickRange('CURRENT')" class="px-2 py-1 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition">현재차수</button>
+              </div>
+            </div>
+          </div>
+          <div class="relative h-64 sm:h-72 w-full">
+            <canvas id="daily-asset-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. 전체 매매기록 -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/70">
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">전체 매매기록</h3>
+            <p class="text-xs text-slate-500 mt-1">날짜 클릭 시 현황판에 반영됩니다. (매수: 빨강 / 매도: 파랑)</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-xl bg-slate-200/80 p-1 text-xs">
+              <button type="button" id="view-mode-1x" onclick="setJournalViewMode('1X')" class="px-3 py-1.5 rounded-lg font-bold bg-white text-slate-900 shadow-2xs transition">1배수 원본</button>
+              <button type="button" id="view-mode-nx" onclick="setJournalViewMode('NX')" class="px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition"><span class="chart-mult-label">4배수</span> 환산</button>
+            </div>
+            <select id="j-cycle-filter" onchange="renderJournalTable()" class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-700">
+              <option value="ALL">전체 사이클</option>
+            </select>
+            <select id="j-sort-order" onchange="renderJournalTable()" class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium bg-white text-slate-700">
+              <option value="DESC">최신순</option>
+              <option value="ASC">과거순</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto overflow-y-auto max-h-[520px] custom-scrollbar">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="sticky top-0 z-20">
+              <tr class="bg-slate-900 text-white uppercase tracking-wider">
+                <th class="py-2.5 px-2 font-semibold text-center sticky-col-1 bg-slate-900 whitespace-nowrap">관리</th>
+                <th class="py-2.5 px-2 font-semibold text-center sticky-col-2 bg-slate-900 whitespace-nowrap">A.차수</th>
+                <th class="py-2.5 px-2 font-semibold text-center sticky-col-3 bg-slate-900 whitespace-nowrap">B.일</th>
+                <th class="py-2.5 px-3 font-semibold sticky-col-4 bg-slate-900 whitespace-nowrap">C.거래당일</th>
+                <th class="py-2.5 px-3 font-semibold whitespace-nowrap">D.전날</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right whitespace-nowrap">E.종가</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right bg-rose-950 text-rose-200 whitespace-nowrap">F.매수1</th>
+                <th class="py-2.5 px-2 font-semibold text-right bg-rose-950 text-rose-200 whitespace-nowrap">G.개수1</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right bg-rose-950 text-rose-200 whitespace-nowrap">H.매수2</th>
+                <th class="py-2.5 px-2 font-semibold text-right bg-rose-950 text-rose-200 whitespace-nowrap">I.개수2</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">J.매도1</th>
+                <th class="py-2.5 px-2 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">K.개수1</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">L.매도2</th>
+                <th class="py-2.5 px-2 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">M.개수2</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">N.매도3</th>
+                <th class="py-2.5 px-2 font-semibold text-right bg-blue-950 text-blue-200 whitespace-nowrap">O.개수3</th>
+                <th class="py-2.5 px-3 font-semibold text-right bg-emerald-950 text-emerald-200 whitespace-nowrap">P.잔금$</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right whitespace-nowrap">잔금비율</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right whitespace-nowrap">Q.평단</th>
+                <th class="py-2.5 px-2.5 font-semibold text-right whitespace-nowrap">R.보유수</th>
+                <th class="py-2.5 px-3 font-semibold text-right whitespace-nowrap">S.실현수익</th>
+                <th class="py-2.5 px-3 font-semibold text-right bg-indigo-950 text-indigo-200 whitespace-nowrap">T.원금+수익</th>
+                <th class="py-2.5 px-3 font-semibold bg-emerald-950 text-emerald-200 whitespace-nowrap">U.실제체결</th>
+              </tr>
+            </thead>
+            <tbody id="journal-table-body" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 5. 사이클별 계좌 평단 기반 손익 & 본전가 계산기 -->
+      <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pb-4 border-b border-slate-200">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-xs font-bold">이동평균법 역산</span>
+              <h3 class="text-base font-bold text-slate-900">사이클별 계좌 평단 기반 손익 & 본전가 계산기</h3>
+              <span id="mavg-cycle-badge" class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">33차 사이클 기준</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">선택한 사이클의 실제 체결 내역(U열)을 자동 파싱하여 본전가와 실현손익을 계산합니다.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="mavg-sort-order" onchange="populateMavgCycleSelect(); renderMavgSection();" class="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-slate-800 focus:outline-none">
+              <option value="DESC">최신순 (33차→9차)</option>
+              <option value="ASC">과거순 (9차→33차)</option>
+            </select>
+            <select id="mavg-cycle-select" onchange="handleMavgCycleChange()" class="px-3 py-1.5 rounded-xl border border-indigo-300 bg-indigo-50/70 text-xs font-bold text-indigo-900 focus:outline-none">
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="mavg-acct-avg" class="text-xs font-bold text-indigo-900">계좌 표시 평단 ($)</label>
+              <button type="button" onclick="syncMavgFromSelectedCycle(true)" class="text-[11px] font-semibold text-indigo-600 hover:underline">동기화</button>
+            </div>
+            <input type="number" id="mavg-acct-avg" step="0.001" min="0" value="93.376" oninput="renderMavgSection()" class="w-full px-3 py-2 rounded-lg border border-indigo-300 text-sm font-bold text-right text-indigo-900 bg-white tabular-nums" />
+          </div>
+          <div>
+            <label for="mavg-cur-price" class="block text-xs font-bold text-slate-700 mb-1">현재 주가 / 기준 종가 ($)</label>
+            <input type="number" id="mavg-cur-price" step="0.01" min="0" value="49.07" oninput="renderMavgSection()" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-bold text-right text-slate-900 bg-white tabular-nums" />
+          </div>
+          <div class="bg-white rounded-lg p-3 border border-slate-200 flex flex-col justify-center">
+            <span class="text-[11px] font-semibold text-slate-500">누적 매수</span>
+            <span id="mavg-buy-agg" class="text-sm font-bold text-rose-700 mt-0.5 tabular-nums">-</span>
+          </div>
+          <div class="bg-white rounded-lg p-3 border border-slate-200 flex flex-col justify-center">
+            <span class="text-[11px] font-semibold text-slate-500">누적 매도</span>
+            <span id="mavg-sell-agg" class="text-sm font-bold text-blue-700 mt-0.5 tabular-nums">-</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 tabular-nums">
+          <div class="p-4 rounded-xl border-2 border-amber-300 bg-amber-50/70">
+            <div class="text-[11px] font-bold text-amber-900">① 사이클 전체 원금 본전</div>
+            <div id="mavg-k7-cycle-be" class="text-xl font-bold text-amber-800 mt-1">$0.00</div>
+          </div>
+          <div class="p-4 rounded-xl border-2 border-indigo-300 bg-indigo-50/60">
+            <div class="text-[11px] font-bold text-indigo-900">② 계좌 평가손익 본전</div>
+            <div id="mavg-k8-acct-be" class="text-xl font-bold text-indigo-700 mt-1">$0.00</div>
+            <div id="mavg-k8-unrealized" class="text-[11px] font-semibold text-blue-700 mt-1">-</div>
+          </div>
+          <div class="p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+            <div class="text-[11px] font-bold text-blue-900">③ 확정 실현손익 ($)</div>
+            <div id="mavg-k4-realized-pnl" class="text-xl font-bold text-blue-700 mt-1">$0.00</div>
+          </div>
+          <div class="p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+            <div class="text-[11px] font-bold text-blue-900">④ 확정 수익률 (%)</div>
+            <div id="mavg-k5-realized-pct" class="text-xl font-bold text-blue-700 mt-1">0.00%</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+          <div class="border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+            <div class="p-3 bg-rose-50/80 border-b border-rose-200/80 flex items-center justify-between">
+              <span class="text-xs font-bold text-rose-900">매수 체결 내역</span>
+            </div>
+            <div class="overflow-y-auto max-h-[300px] custom-scrollbar">
+              <table class="w-full text-xs text-left border-collapse tabular-nums">
+                <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="py-2 px-3 text-center w-12">회차</th>
+                    <th class="py-2 px-3">거래일</th>
+                    <th class="py-2 px-3 text-right">단가</th>
+                    <th class="py-2 px-3 text-right">수량</th>
+                    <th class="py-2 px-3 text-right">금액</th>
+                  </tr>
+                </thead>
+                <tbody id="mavg-buy-tbody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+            <div class="p-3 bg-blue-50/80 border-b border-blue-200/80 flex items-center justify-between">
+              <span class="text-xs font-bold text-blue-900">매도 체결 내역</span>
+            </div>
+            <div class="overflow-y-auto max-h-[300px] custom-scrollbar">
+              <table class="w-full text-xs text-left border-collapse tabular-nums">
+                <thead class="sticky top-0 bg-slate-100 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th class="py-2 px-3 text-center w-12">회차</th>
+                    <th class="py-2 px-3">거래일</th>
+                    <th class="py-2 px-3 text-right">단가</th>
+                    <th class="py-2 px-3 text-right">수량</th>
+                    <th class="py-2 px-3 text-right">금액</th>
+                  </tr>
+                </thead>
+                <tbody id="mavg-sell-tbody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Firebase 설정 초기화
+    const firebaseConfig = {
+      apiKey: "AIzaSyCIx9zbpijvP_QUJhTjNntpTh0S3nReSQI",
+      authDomain: "trading-log-5b43f.firebaseapp.com",
+      databaseURL: "https://trading-log-5b43f-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "trading-log-5b43f",
+      storageBucket: "trading-log-5b43f.firebasestorage.app",
+      messagingSenderId: "739171193289",
+      appId: "1:739171193289:web:d4702ae063890cd7351818",
+      measurementId: "G-HC1Z79GM5Q"
+    };
+
+    let db = null;
+    let isCloudConnected = false;
+    let isRemoteUpdating = false;
+
+    try {
+      if (typeof firebase !== 'undefined') {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.database();
+      }
+    } catch (err) {
+      console.error('Firebase init error:', err);
+    }
+
+    function updateCloudBadge(status, text) {
+      const badge = document.getElementById('cloud-sync-badge');
+      const dot = document.getElementById('cloud-sync-dot');
+      const label = document.getElementById('cloud-sync-text');
+      if (!badge || !dot || !label) return;
+      label.innerText = text;
+      if (status === 'connected') {
+        badge.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
+      } else if (status === 'syncing') {
+        badge.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30";
+        dot.className = "w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping";
+      } else {
+        badge.className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30";
+        dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400";
+      }
+    }
+
+    const STORAGE_KEYS = {
+      FX_DATA: 'pvr7_fx_transactions_v6',
+      JOURNAL_DATA: 'pvr7_journal_rows_v6',
+      SETTINGS_DATA: 'pvr7_user_settings_v6'
+    };
+
+    let fxList = [];
+    let journalList = [];
+    let settings = { multiplier: 4, basePrincipal: 10000, todayRate: 1332.92 };
+    let journalViewMode = '1X';
+    let fxTypeFilter = 'ALL';
+    let currentSelectedJournalIndex = 0;
+    let cyclePerfChartInstance = null;
+    let soxlChartInstance = null;
+
+    const INITIAL_FX_DATA = [
+      { id: 'fx-1', date: '2026-07-03', type: '환전', krw: 5000000, usd: 3751.78, memo: '초기 환전' },
+      { id: 'fx-2', date: '2026-07-10', type: '외화이체', krw: 0, usd: 2500.00, memo: '외화 입금' },
+      { id: 'fx-3', date: '2026-07-17', type: '환전', krw: 4500000, usd: 3381.12, memo: '환전' },
+      { id: 'fx-4', date: '2026-07-24', type: '환전', krw: 3000000, usd: 2260.45, memo: '환전' },
+      { id: 'fx-5', date: '2026-07-31', type: '외화이체', krw: 0, usd: 1800.00, memo: '외화 입금' },
+      { id: 'fx-6', date: '2026-08-07', type: '환전', krw: 5200000, usd: 3912.40, memo: '환전' },
+      { id: 'fx-7', date: '2026-08-14', type: '원화이체', krw: 2000000, usd: 0, memo: '출금' },
+      { id: 'fx-8', date: '2026-08-21', type: '환전', krw: 4000000, usd: 3012.05, memo: '환전' },
+      { id: 'fx-9', date: '2026-08-28', type: '외화이체', krw: 0, usd: 3500.70, memo: '입금' },
+      { id: 'fx-10', date: '2026-09-04', type: '환전', krw: 6000000, usd: 4521.10, memo: '환전' },
+      { id: 'fx-11', date: '2026-09-11', type: '환전', krw: 3500000, usd: 2634.50, memo: '환전' },
+      { id: 'fx-12', date: '2026-09-18', type: '외화이체', krw: 0, usd: 2951.00, memo: '입금' },
+      { id: 'fx-13', date: '2026-09-25', type: '환전', krw: 4800000, usd: 3615.22, memo: '환전' },
+      { id: 'fx-14', date: '2026-10-02', type: '환전', krw: 5500000, usd: 4145.80, memo: '환전' },
+      { id: 'fx-15', date: '2026-10-09', type: '외화이체', krw: 0, usd: 4250.00, memo: '입금' },
+      { id: 'fx-16', date: '2026-10-16', type: '환전', krw: 3800000, usd: 2865.40, memo: '환전' },
+      { id: 'fx-17', date: '2026-10-23', type: '환전', krw: 4200000, usd: 3168.90, memo: '환전' },
+      { id: 'fx-18', date: '2026-10-30', type: '외화이체', krw: 0, usd: 3750.00, memo: '입금' },
+      { id: 'fx-19', date: '2026-11-05', type: '환전', krw: 3747966, usd: 2826.00, memo: '환전 마감' }
+    ];
+
+    // 9차 1일차(2026-04-01) ~ 33차 34일차(2026-11-18) 142행 전체 원본 TSV
+    const RAW_JOURNAL_TSV = `9	1	2026-04-01	2026-03-31	47.91	47.41	18	47.86	18			49.13	15	48.09	18	8,530.33	46.387	62	81.1	11,406.30	
+9	2	2026-04-02	2026-04-01	52.26	52.07	16	52.20	17					52.53	29	10,256.79	46.387	29	276.8	11,602.00	
+10	1	2026-04-06	2026-04-02	52.75	56.93	12	52.69	17	-	0	-	0	-	0	11,785.80	0	0	183.38	11,785.80	VWAP 기준 52.72~52.73 근처에서 29개 모두 매도되었습니다
+10	2	2026-04-07	2026-04-06	54.81	54.52	16	54.61	16	-	0	-	0	55.00	12	11,130.21	54.632	12	183.38	11,785.80	VWAP 기준 54.63~54.64 근처에서 12개 매수되었습니다
+11	1	2026-04-08	2026-04-07	56.55	60.47	12	56.14	17	-	0	-	0	-	0	11,804.23	0	0	118.43	11,804.23	VWAP 기준 56.16~56.17 근처에서 12개 매도되었습니다
+11	2	2026-04-09	2026-04-08	67.50	72.19	10	67.43	14	-	0	-	0	-	0	11,804.23	0	0	118.43	11,804.23	어제 매수시도가 체결되지 않았습니다
+11	3	2026-04-10	2026-04-09	71.98	71.82	11	71.90	11	72.35	10	-	0	-	0	11,084.10	72.013	10	118.43	11,804.23	VWAP 기준 72.01 근처에서 10개 매수되었습니다
+12	1	2026-04-13	2026-04-10	76.39	81.70	8	76.31	14	-	0	-	0	-	0	11,851.94	0	0	47.71	11,851.94	VWAP 기준 76.78~76.79 근처에서 10개 모두 매도되었습니다
+12	2	2026-04-14	2026-04-13	80.56	80.05	10	80.22	10	80.79	8	-	0	-	0	11,210.02	80.241	8	47.71	11,851.94	VWAP 기준 80.24 근처에서 8개 매수되었습니다
+13	1	2026-04-15	2026-04-14	85.31	91.24	8	85.09	10	-	0	-	0	-	0	11,890.90	0	0	38.96	11,890.90	VWAP 기준 85.11 근처에서 8개 전부 매도되었습니다
+13	2	2026-04-16	2026-04-15	85.96	84.66	10	85.00	10	-	0	85.16	6	85.98	14	10,700.55	85.025	14	38.96	11,890.90	VWAP 기준 평균 85.02~85.03 근처에서 14개 매수되었습니다
+14	1	2026-04-17	2026-04-16	88.37	94.52	8	88.17	10	-	0	-	0	-	0	11,935.28	0	0	44.38	11,935.28	VWAP 기준 88.19~88.20 사이에서 14개 모두 매도되었습니다
+14	2	2026-04-20	2026-04-17	94.68	93.87	9	94.08	9	-	0	-	0	94.85	7	11,276.52	94.108	7	44.38	11,935.28	VWAP 기준 94.11 근처에서 7개 매수되었습니다
+15	1	2026-04-21	2026-04-20	95.94	102.62	7	95.65	9	-	0	-	0	-	0	11,946.27	0	0	10.99	11,946.27	VWAP 기준 95.67~95.68 근처에서 7개 매도되었습니다
+15	2	2026-04-22	2026-04-21	98.09	97.51	7	97.72	9	-	0	-	0	98.39	7	11,262.07	97.743	7	10.99	11,946.27	VWAP 기준 97.74~97.75 근처에서 7개 매수되었습니다
+16	1	2026-04-23	2026-04-22	105.64	112.99	7	105.53	8	-	0	-	0	-	0	12,001.10	0	0	54.83	12,001.10	VWAP 기준 105.57~105.58 근처에서 7개 모두 매도되었습니다
+16	2	2026-04-24	2026-04-23	112.77	110.96	7	111.24	7	-	0	-	0	112.79	7	11,222.26	111.262	7	54.83	12,001.10	VWAP 기준 111.26~111.27 근처에서 7개 매수되었습니다
+17	1	2026-04-27	2026-04-24	128.32	137.26	5	127.56	7	-	0	-	0	-	0	12,115.36	0	0	114.26	12,115.36	VWAP 기준 127.58~127.59 근처에서 7개 매도되었습니다
+17	2	2026-04-28	2026-04-27	123.39	122.27	7	122.88	7	-	0	123.09	7	123.70	12	10,640.52	122.903	12	114.26	12,115.36	VWAP 기준 122.90~122.91 사이에서 12개 매수되었습니다
+17	3	2026-04-29	2026-04-28	109.56	108.87	7	109.45	8	122.97	7	110.20	7	110.22	7	9,100.08	115.972	26	114.26	12,115.36	VWAP 기준 110.03 근처에서 14개 매수되었습니다
+17	4	2026-04-30	2026-04-29	117.97	116.66	7	117.20	7	-	0	122.85	7	118.13	12	10,741.25	115.972	12	17.56	12,132.91	VWAP 기준 117.22~117.23 근처에서 14개 매도되었습니다
+18	1	2026-05-01	2026-04-30	126.98	135.83	5	126.18	7	-	0	-	0	-	0	12,255.69	0	0	122.78	12,255.69	VWAP 기준 126.20~126.21 근처에서 12개 매도되었습니다
+18	2	2026-05-04	2026-05-01	130.40	130.26	6	130.27	6	-	0	-	0	131.10	5	11,603.02	130.535	5	122.78	12,255.69	VWAP 기준 130.53~130.54 근처에서 5개 매수되었습니다
+18	3	2026-05-05	2026-05-04	127.55	127.14	6	127.43	7	-	0	128.30	6	128.37	6	10,065.76	128.82	17	122.78	12,255.69	VWAP 기준 128.10~128.11 근처에서 12개 매수되었습니다
+18	4	2026-05-06	2026-05-05	144.16	143.59	6	143.88	6	-	0	-	0	144.72	5	11,792.55	128.82	5	180.95	12,436.65	VWAP기준 143.90 근처에서 12개 매도되었습니다
+19	1	2026-05-07	2026-05-06	165.85	177.42	5	164.21	5	-	0	-	0	-	0	12,613.66	0	0	177.01	12,613.66	VWAP 기준 164.22 근처에서 5개 매도되었습니다
+19	2	2026-05-08	2026-05-07	152.10	151.73	5	151.95	6	-	0	152.74	5	152.99	10	11,088.56	152.51	10	177.01	12,613.66	VWAP 기준 152.51 근처에서 10개 매수되었습니다
+20	1	2026-05-11	2026-05-08	176.94	189.29	4	176.05	5	-	0	-	0	-	0	12,849.26	0	0	235.6	12,849.26	VWAP 기준 176.07 근처에서 10개 모두 매도되었습니다
+20	2	2026-05-12	2026-05-11	190.42	187.53	4	187.75	4	-	0	-	0	190.44	2	12,473.74	187.76	2	235.6	12,849.26	VWAP 기준 187.76 근처에서 2개 매수되었습니다
+20	3	2026-05-13	2026-05-12	172.52	170.25	5	171.22	5	-	0	171.49	4	172.64	10	11,103.90	174.536	10	235.6	12,849.26	VWAP 기준 171.23 근처에서 8개 매수되었습니다
+21	1	2026-05-14	2026-05-13	184.24	197.10	4	184.06	5	-	0	-	0	-	0	12,950.48	0	0	101.22	12,950.48	VWAP 기준 184.65 근처에서 10개 모두 매도되었습니다
+21	2	2026-05-15	2026-05-14	186.19	187.69	4	186.01	5	-	0	-	0	188.06	4	12,197.92	188.141	4	101.22	12,950.48	VWAP 기준 186.14 근처에서 4개 매수되었습니다
+21	3	2026-05-18	2026-05-15	164.18	165.53	5	164.02	5	-	0	167.16	5	166.16	5	10,697.31	173.321	13	101.22	12,950.48	VWAP 기준 164.73~164.74 근처에서 10개 매수되었습니다
+21	4	2026-05-19	2026-05-18	151.75	149.15	6	151.00	6	166.82	5	151.24	5	151.93	5	9,187.21	163.621	23	101.22	12,950.48	VWAP 기준 151.01 근처에서 12개 매수되었습니다
+21	5	2026-05-20	2026-05-19	151.89	149.50	6	151.74	6	-	0	166.66	5	151.92	5	10,406.28	163.082	15	-97.98	12,852.50	VWAP 기준 150.69 근처에서 1개 매수되고 152.19~152.20 근처에서 9개 매도되었습니다
+21	6	2026-05-21	2026-05-20	173.20	171.87	5	172.33	5	-	0	-	0	173.59	5	12,129.71	163.082	5	-5.37	12,945.11	VWAP 기준 172.24~172.25 근처에서 10개 매수되었습니다
+22	1	2026-05-22	2026-05-21	178.39	190.84	4	178.22	5	-	0	-	0	-	0	13,013.51	0	0	68.4	13,013.51	VWAP 기준 176.76 근처에서 5개 모두 매도되었습니다
+22	2	2026-05-26	2026-05-22	190.56	190.02	4	190.37	4	-	0	-	0	191.43	4	12,251.57	190.483	4	68.4	13,013.51	VWAP 기준 190.48~190.49 근처에서 4개 매수되었습니다
+23	1	2026-05-27	2026-05-26	225.79	241.56	3	225.57	4	-	0	-	0	-	0	13,158.78	0	0	145.27	13,158.78	VWAP 기준 226.8 근처에서 4개모두 매도되었습니다
+23	2	2026-05-28	2026-05-27	217.98	216.84	4	217.77	4	-	0	218.23	4	218.92	7	11,633.51	217.897	7	145.27	13,158.78	VWAP 기준 217.89~217.90 근처에서 7개 매수되었습니다
+24	1	2026-05-29	2026-05-28	224.63	240.31	3	224.41	4	-	0	-	0	-	0	13,209.75	0	0	50.97	13,209.75	VWAP 기준 225.17~225.19 근처에서 7개 모두 매도되었습니다
+24	2	2026-06-01	2026-05-29	224.34	222.76	4	223.89	4	-	0	224.47	4	225.12	7	11,642.41	223.906	7	50.97	13,209.75	VWAP 기준 223.90~223.91 근처에서 7개 매수되었습니다
+25	1	2026-06-02	2026-06-01	227.03	242.88	3	226.12	4	-	0	-	0	-	0	13,225.38	0	0	15.63	13,225.38	VWAP 기준 227.14 근처에서 7개 모두 매도되었습니다
+25	2	2026-06-03	2026-06-02	266.32	284.92	3	266.06	3	-	0	-	0	-	0	13,225.38	0	0	15.63	13,225.38	금일부로 특별한 건이 있어, 오늘 날짜(6/2)부터 새 사이클을 시작합니다.
+25	3	2026-06-04	2026-06-03	280.54	281.27	3	280.26	3	-	0	-	0	282.62	3	12,379.28	282.034	3	15.63	13,225.38	VWAP 기준 282.03~282.04 근처에서 3개 매수되었습니다
+25	4	2026-06-05	2026-06-04	262.70	263.43	3	262.44	3	-	0	265.91	3	265.20	3	10,786.25	271.014	9	15.63	13,225.38	VWAP 기준 265.50~265.51 근처에서 6개 매수되었습니다
+25	5	2026-06-08	2026-06-05	182.54	187.11	5	182.36	5	265.91	3	189.76	3	187.73	3	9,650.58	238.32	15	15.63	13,225.38	VWAP 기준 189.28 근처에서 6개 매수되었습니다
+25	6	2026-06-09	2026-06-08	211.44	209.84	4	211.23	4	-	0	265.38	3	212.25	4	10,918.38	238.32	9	-162.12	13,063.26	VWAP 기준 211.39 근처에서 6개 매도되었습니다
+25	7	2026-06-10	2026-06-09	201.68	192.52	4	194.79	5	265.11	3	195.10	4	201.70	4	9,359.98	217.84	17	-162.12	13,063.26	VWAP 기준 194.80 근처에서 8개 매수되었습니다
+25	8	2026-06-11	2026-06-10	180.65	178.99	5	180.47	5	194.90	4	182.38	5	182.18	4	7,721.06	205.469	26	-162.12	13,063.26	VWAP 기준 182.10 근처에서 9개 매수되었습니다
+25	9	2026-06-12	2026-06-11	223.99	221.88	4	223.75	4	-	0	-	0	224.75	6	10,630.04	205.469	13	75.76	13,301.14	VWAP 기준 223.76~223.77 근처에서 13개 매도되었습니다
+25	10	2026-06-15	2026-06-12	234.68	234.22	4	234.45	4	-	0	-	0	236.15	7	12,041.77	205.469	7	254.67	13,480.05	VWAP 기준 235.28~235.29 6개 매도되었습니다
+26	1	2026-06-16	2026-06-15	272.50	291.54	3	272.23	3	-	0	-	0	-	0	13,953.98	0	0	473.93	13,953.98	VWAP 기준 273.17 근처에서 7개 모두 매도되었습니다
+26	2	2026-06-17	2026-06-16	226.19	231.61	4	225.97	4	-	0	232.94	3	231.81	남은전부	12,558.43	232.59	6	473.93	13,953.98	VWAP 기준 232.59 근처에서 6개 매수되었습니다
+27	1	2026-06-18	2026-06-17	233.86	250.19	3	233.63	4	-	0	-	0	-	0	13,977.43	0	0	23.45	13,977.43	VWAP 기준 236.5 근처에서 6개 모두 매도되었습니다
+27	2	2026-06-22	2026-06-18	279.29	298.80	3	279.02	3	-	0	-	0	-	0	13,977.43	0	0	23.45	13,977.43	오늘은 아무매매도 발생하지 않았습니다
+27	3	2026-06-23	2026-06-22	300.77	295.43	3	295.95	3	-	0	300.79	2	-	0	13,385.51	295.96	2	23.45	13,977.43	VWAP 기준 295.96 근처에서 2개 매수되었습니다
+27	4	2026-06-24	2026-06-23	231.42	229.37	4	230.74	4	-	0	231.10	3	231.98	3	12,001.01	247.053	8	23.45	13,977.43	VWAP 기준 230.75 기준으로 6개 매수되었습니다
+27	5	2026-06-25	2026-06-24	229.57	220.23	4	222.42	4	230.87	3	222.77	3	229.59	4	10,666.40	236.502	14	23.45	13,977.43	VWAP 기준 222.80 근처에서 6개로 부분매수 되었습니다. 7개나 8개 매수되신 분도 모두 정상입니다
+27	6	2026-06-26	2026-06-25	252.61	249.07	4	249.73	4	-	0	-	0	252.63	4	13,161.69	236.659	4	130.89	14,108.33	VWAP 기준 249.74~249.75 근처에서 10개 매도되었습니다
+27	7	2026-06-27	2026-06-26	215.60	218.51	4	215.39	4	-	0	220.85	4	219.63	4	11,399.37	225.746	12	130.89	14,108.33	VWAP 기준 220.29 근처에서 8개 매수되었습니다
+27	8	2026-06-30	2026-06-29	236.52	233.84	4	234.46	4	-	0	-	0	236.54	4	13,275.13	225.746	4	200.68	14,178.12	VWAP 기준 234.47 근처에서 8개 매도되었습니다
+28	1	2026-07-01	2026-06-30	266.71	285.34	3	266.45	3	-	0	-	0	-	0	14,349.81	0	0	171.69	14,349.81	VWAP 기준 268.67 근처에서 4개 모두 매도되었습니다
+28	2	2026-07-02	2026-07-01	217.55	222.00	4	217.34	4	-	0	224.21	3	222.79	6	13,006.59	223.87	6	171.69	14,349.81	VWAP 기준 223.87 근처에서 6개 매수되었습니다
+28	3	2026-07-06	2026-07-02	181.47	173.63	5	175.04	6	223.99	3	175.32	4	181.49	4	11,606.19	195.973	14	171.69	14,349.81	VWAP 기준 175.05 근처에서 8개 매수되었습니다
+28	4	2026-07-07	2026-07-06	194.65	198.06	5	194.46	5	-	0	-	0	198.29	6	13,195.95	195.973	6	21.98	14,371.79	VWAP 기준 198.72 근처에서 8개 매도되었습니다
+28	5	2026-07-08	2026-07-07	165.28	160.54	6	161.84	6	-	0	162.10	5	165.30	5	11,577.45	174.646	16	21.98	14,371.79	VWAP 기준 161.85 근처에서 10개 매수되었습니다
+28	6	2026-07-09	2026-07-08	174.82	173.38	5	173.89	6	-	0	-	0	175.03	6	13,316.45	174.646	6	14.52	14,364.33	VWAP 기준 173.90 근처에서 10개 매도되었습니다
+29	1	2026-07-10	2026-07-09	192.45	205.88	5	191.86	5	-	0	-	0	-	0	14,467.67	0	0	103.34	14,467.67	VWAP 기준 191.87 근처에서 6개 모두 매도되었습니다
+29	2	2026-07-13	2026-07-10	192.26	192.54	5	192.07	5	-	0	-	0	193.71	5	13,502.37	193.061	5	103.34	14,467.67	VWAP 기준 193.06~193.07 사이에서 5개 매수되었습니다
+29	3	2026-07-14	2026-07-13	165.37	164.03	6	165.21	6	-	0	165.47	5	165.97	6	11,850.17	174.5	15	103.34	14,467.67	VWAP 기준 165.22 근처에서 10개 매수되었습니다
+29	4	2026-07-15	2026-07-14	176.66	176.20	6	176.49	6	-	0	-	0	177.43	4	13,791.89	174.50	4	22.22	14,489.89	VWAP 기준 176.52 근처에서 11개 매도되었습니다
+29	5	2026-07-16	2026-07-15	165.55	163.92	6	165.10	6	-	0	165.37	6	165.96	6	11,810.49	167.463	6	22.22	14,489.89	VWAP 기준 165.11~165.12 근처에서 12개 매수되었습니다
+29	6	2026-07-17	2026-07-16	142.48	138.69	8	140.32	8	165.20	6	140.55	6	142.50	7	10,126.47	155.836	28	22.22	14,489.89	VWAP 기준 140.33~140.34 근처에서 12개 매수되었습니다
+29	7	2026-07-20	2026-07-17	135.47	134.70	8	135.34	8	140.55	6	137.48	8	136.99	7	7,932.39	135.47	44	22.22	14,489.89	VWAP 기준 137.13 근처에서 16개 매수되었습니다
+29	8	2026-07-21	2026-07-20	136.81	135.87	8	136.68	8	164.87	6	140.27	6	137.84	7	9,721.19	149.034	31	-126.43	14,341.25	VWAP 기준 137.60 근처에서 13개 매도되었습니다 (부분매도)
+29	9	2026-07-22	2026-07-21	158.54	155.64	7	156.76	7	-	0	164.71	6	158.56	7	11,759.20	149.034	18	-25.86	14,441.81	VWAP 기준 156.77 근처에서 13개 매도되었습니다
+29	10	2026-07-23	2026-07-22	160.99	161.41	6	160.83	7	-	0	164.54	6	162.50	남은전부	12,894.18	149.034	11	65.88	14,533.55	VWAP 기준 162.14 근처에서 7개 매도되었습니다
+29	11	2026-07-24	2026-07-23	157.50	153.51	7	155.03	7	164.38	6	155.28	7	157.52	7	10,878.66	152.287	24	65.88	14,533.55	VWAP 기준 155.04 근처에서 13개 매수되었습니다
+29	12	2026-07-27	2026-07-24	136.81	134.44	8	136.48	8	155.28	7	136.84	7	137.06	7	8,967.80	146.467	38	65.88	14,533.55	VWAP 기준 136.49 근처에서 14개 매수되었습니다
+29	13	2026-07-28	2026-07-27	128.15	126.84	8	128.03	9	136.56	7	129.72	8	129.41	7	6,895.48	141.446	54	65.88	14,533.55	VWAP 기준 129.52 근처에서 16개 매수되었습니다
+29	14	2026-07-29	2026-07-28	109.54	110.94	10	109.44	10	129.59	8	114.06	9	112.67	8	4,959.52	134.846	71	65.88	14,533.55	VWAP 기준 113.88 근처에서 17개 매수되었습니다
+29	15	2026-07-30	2026-07-29	91.99	98.07	11	91.90	12	113.94	9	101.39	10	98.30	8	2,934.92	127.458	91	65.88	14,533.55	VWAP 기준 101.23 근처에서 20개 매수되었습니다
+29	16	2026-07-31	2026-07-30	114.72	112.22	9	114.61	10	136.15	7	129.33	8	115.02	8	6,032.63	127.458	64	-343.64	14,189.91	VWAP 기준 114.73 근처에서 27개 매도되었습니다
+29	17	2026-08-03	2026-07-31	114.72	114.49	9	114.60	10	129.33	8	114.90	10	117.28	8	5,831.41	125.511	66	-352.54	14,115.13	VWAP 기준 118.11 근처에서 8개 매도되고 114.61 에서 10개 매수되었슴니다
+29	18	2026-08-04	2026-08-03	116.71	114.68	9	116.59	9	135.88	7	129.07	8	117.11	8	7,349.55	125.511	53	-466.04	14,001.63	VWAP 기준 116.78 근처에서 13개로 부분매도 되었습니다
+29	19	2026-08-05	2026-08-04	139.90	139.42	7	139.76	8	-	-	154.04	7	141.09	8	10,589.33	125.511	30	-113.02	14,354.66	VWAP 기준 140.86 근처에서 23개 매도되었습니다
+29	20	2026-08-06	2026-08-05	132.07	134.44	8	131.93	8	153.88	7	136.78	8	135.51	8	8,540.78	129.197	45	-113.02	14,354.66	VWAP 기준 136.57 근처에서 15개 매수되었습니다
+29	21	2026-08-07	2026-08-06	132.33	131.81	8	132.19	8	153.73	7	136.64	8	134	8	7,737.96	129.987	51	-100.39	14,367.28	VWAP 기준 135.51 에서 8개매도시도 중 2개만 부분매도 되고, 134.23에서 8개 매수되었습니다
+29	22	2026-08-10	2026-08-07	140.25	136.44	8	138.12	8	-	-	153.73	7	140.27	8	9,948.20	129.987	35	30.06	14,497.73	VWAP 기준 138.14 근처에서 16개 매도되었습니다
+29	23	2026-08-11	2026-08-10	130.00	132.91	8	129.87	9	153.42	7	135.56	8	133.97	8	7,782.60	131.669	51	30.06	14,497.73	VWAP 기준 135.35 근처에서 16개 매수되었습니다
+29	24	2026-08-12	2026-08-11	133.00	129.72	8	132.48	8	153.26	7	135.42	8	133.02	8	6,722.60	131.782	59	30.06	14,497.73	VWAP 기준 132.50 근처에서 8개 매수되었습니다
+29	25	2026-08-13	2026-08-12	142.16	140.71	7	142.01	8	-	-	153.11	7	143.13	8	9,009.00	131.782	43	207.95	14,675.62	VWAP 기준 142.90 근처에서 16개 매도되었습니다
+29	26	2026-08-14	2026-08-13	145.36	144.52	7	145.21	8	-	-	152.95	7	146.52	8	10,179.56	131.782	35	324.25	14,791.93	VWAP 기준 146.32 근처에서 8개 매도되었습니다
+29	27	2026-08-17	2026-08-14	144.95	141.00	7	143.61	8	152.95	7	143.99	8	144.97	8	8,025.11	135.336	50	324.25	14,791.93	VWAP 기준 143.63 근처에서 15개 매수되었습니다
+29	28	2026-08-18	2026-08-17	151.53	149.75	7	151.37	8	-	-	152.64	7	152.14	9	10,450.87	135.336	34	584.63	15,052.30	VWAP 기준 151.61 근처에서 16개 매도되었습니다
+29	29	2026-08-19	2026-08-18	129.10	125.32	8	127.71	9	152.49	7	127.93	7	129.12	8	8,534.92	133.008	49	584.63	15,052.30	VWAP 기준 127.73 근처에서 15개 매수되었습니다
+29	30	2026-08-20	2026-08-19	120.74	118.97	8	120.61	10	127.80	7	122.20	9	121.86	8	6,460.75	130.175	66	584.63	15,052.30	VWAP 기준 122.01 근처에서 17개 매수되었습니다
+29	31	2026-08-21	2026-08-20	122.21	119.76	8	122.01	9	152.18	7	127.67	7	122.45	8	8,535.26	130.175	49	446.16	14,913.84	VWAP 기준 122.03 근처에서 17개 매도되었습니다
+29	32	2026-08-24	2026-08-21	120.60	119.39	8	120.47	9	127.67	7	121.41	9	121.87	8	7,445.36	128.767	58	446.16	14,913.84	VWAP 기준 121.10 근처에서 9개 매수되었습니다
+29	33	2026-08-25	2026-08-24	111.16	109.65	9	111.04	10	121.17	9	112.90	9	112.43	9	5,528.95	125.132	75	446.16	14,913.84	VWAP 기준 112.73 근처에서 17개 매수되었습니다
+29	34	2026-08-26	2026-08-25	115.67	112.36	9	114.71	10	127.29	7	121.04	9	115.69	9	7,594.09	125.132	57	258.93	14,726.60	VWAP 기준 114.73 근처에서 18개 매도되었습니다
+29	35	2026-08-27	2026-08-26	116.60	114.35	9	116.35	9	127.16	7	120.92	9	116.81	8	8,641.42	125.132	48	180.07	14,647.75	VWAP 기준 116.37 근처에서 9개 매도되었습니다
+29	36	2026-08-28	2026-08-27	123.05	119.16	8	120.51	9	-	-	127.03	7	123.07	8	10,690.43	125.132	31	101.84	14,569.51	VWAP 기준 120.53 근처에서 17개 매도되었습니다
+29	37	2026-08-31	2026-08-28	111.34	110.66	9	111.22	10	127.03	7	112.84	9	112.50	8	8,777.08	120.676	48	101.84	14,569.51	VWAP 기준 112.55 근처에서 17개 매수되었습니다
+29	38	2026-09-01	2026-08-31	112.79	111.60	9	112.67	9	-	-	126.78	7	113.25	8	10,695.02	120.676	31	-31.71	14,435.97	VWAP 기준 112.82 근처에서 17개 매도되었습니다
+29	39	2026-09-02	2026-09-01	105.91	104.34	9	105.80	10	126.65	7	106.25	9	106.37	8	8,785.40	115.318	49	-31.71	14,435.97	VWAP 기준 106.09 근처에서 18개 매수되었습니다
+29	40	2026-09-03	2026-09-02	106.35	105.16	9	106.24	10	-	-	126.52	7	106.74	8	10,592.67	115.318	32	-184.84	14,282.83	VWAP 기준 106.31 근처에서 17개 매도되었습니다
+29	41	2026-09-04	2026-09-03	106.74	105.88	9	109.63	9	-	-	126.39	7	110.19	8	11,446.59	115.318	24	-253.46	14,214.21	VWAP 기준 106.74 근처에서 8개 매도되었습니다
+29	42	2026-09-08	2026-09-04	117.28	114.97	8	118.57	8	-	-	-	-	119.30	8	12,371.31	115.318	16	-251.28	14,216.39	VWAP 기준 115.59 근처에서 8개 매도되었습니다
+29	43	2026-09-09	2026-09-08	123.27	123.13	8	125.14	8	-	-	-	-	125.99	남은 전부	13,358.99	115.318	8	-186.14	14,281.53	VWAP 기준 123.46 근처에서 8개 매도되었습니다
+29	44	2026-09-10	2026-09-09	125.87	124.43	8	127.12	8	-	-	-	-	127.94	8	12,357.87	120.229	16	-186.14	14,281.53	VWAP 기준 125.14 근처에서 8개 매수되었습니다
+29	45	2026-09-11	2026-09-10	115.76	116.06	8	116.64	9	-	-	117.54	8	118.27	8	10,480.11	118.794	32	-186.14	14,281.53	VWAP 기준 117.36 근처에서 16개 매수되었습니다
+29	46	2026-09-14	2026-09-11	121.82	120.97	8	122.61	8	-	-	-	-	123.24	8	12,426.19	118.794	16	-140.77	14,326.90	VWAP 기준 121.63 근처에서 16개 매도되었습니다
+29	47	2026-09-15	2026-09-14	101.13	102.01	10	102.02	10	-	-	103.22	8	103.82	9	10,777.23	110.927	32	-140.77	14,326.90	VWAP 기준 103.06 근처에서 16개 매수되었습니다
+29	48	2026-09-16	2026-09-15	102.32	101.70	10	102.50	10	103.12	8	103.18	10	103.68	9	9,757.03	108.806	42	-140.77	14,326.90	VWAP 기준 102.02 근처에서 10개 매수되었습니다
+29	49	2026-09-17	2026-09-16	103.97	102.92	10	103.90	10	-	-	-	-	104.58	8	12,549.37	108.806	15	-286.21	14,181.46	VWAP 기준 103.42 근처에서 27개 매도되었습니다
+29	50	2026-09-18	2026-09-17	114.82	114.50	9	115.90	8	-	-	-	-	116.33	남은 전부	13,467.29	108.806	7	-238.74	14,228.93	VWAP 기준 114.74 근처에서 8개 매도되었습니다
+30	1	2026-09-21	2026-09-18	123.67	132.29	8	123.50	8	-	-	-	-	-	-	14,299.87	0	0	-167.81	14,299.87	VWAP 기준 118.94 근처에서 7개 매도되었습니다
+30	2	2026-09-22	2026-09-21	141.93	151.83	6	141.78	7	-	-	-	-	-	-	14,299.87	0	0	-167.81	14,299.87	아무 매매도 발생하지 않았습니다.
+30	3	2026-09-23	2026-09-22	151.95	150.34	7	151.73	7	-	-	-	-	151.97	남은 전부	13,395.37	150.75	6	-167.81	14,299.87	VWAP 기준 150.75 근처에서 6개 매수되었습니다
+30	4	2026-09-24	2026-09-23	146.25	144.29	7	146.01	7	-	-	146.32	7	146.36	7	11,358.23	147.082	20	-167.81	14,299.87	VWAP 기준 145.51 근처에서 14개 매수되었습니다
+30	5	2026-09-25	2026-09-24	146.33	145.68	7	146.70	7	-	-	-	-	147.21	남은 전부	12,678.74	146.796	11	-6.38	14,293.49	VWAP 기준 145.65에서 5개가 부분매수 되고 146.34에서 14개가 매도되었습니다.
+31	1	2026-09-28	2026-09-25	151.45	162.01	6	151.81	7	-	-	-	-	-	-	14,347.11	0	0	47.24	14,347.11	VWAP 기준 151.67 근처에서 11개 모두 매도되었습니다
+31	2	2026-09-29	2026-09-28	142.29	141.72	7	142.14	7	-	-	142.67	7	143.04	남은 전부	12,495.26	142.45	13	47.24	14,347.11	VWAP 기준 142.45 근처에서 13개 매수되었습니다
+32	1	2026-09-30	2026-09-29	147.00	157.25	7	146.73	7	-	-	-	-	-	-	14,403.01	0	0	55.09	14,403.01	VWAP 기준 146.75 근처에서 13개 모두 매도되었습니다
+32	2	2026-10-01	2026-09-30	147.86	148.63	7	148.71	7	-	-	-	-	149.35	남은 전부	13,359.80	149.03	7	55.09	14,403.01	VWAP 기준 149.03 근처에서 7개 매수되었습니다
+33	1	2026-10-02	2026-10-01	153.69	164.41	6	154.52	7	-	-	-	-	-	-	14,434.58	0	0	31.57	14,434.58	VWAP 기준 153.54 근처에서 7개 모두 매도되었습니다
+33	2	2026-10-05	2026-10-02	163.71	163.78	6	163.54	6	-	-	-	-	164.83	남은 전부	13,449.26	164.22	6	31.57	14,434.58	VWAP 기준 164.22 근처에서 6개 매수되었습니다
+33	3	2026-10-06	2026-10-05	164.27	162.89	6	163.75	6	-	-	-	-	164.67	남은 전부	12,466.64	163.995	12	31.57	14,434.58	VWAP 기준 163.77 근처에서 6개 매수되었습니다
+33	4	2026-10-07	2026-10-06	164.26	162.89	6	163.71	6	-	-	-	-	164.66	남은 전부	12,472.28	163.863	12	4.05	14,438.63	VWAP 기준 164.67 에서 6개로 부분매도 되고 163.73 에서 6개 매수되었습니다
+33	5	2026-10-08	2026-10-07	158.91	157.11	7	158.75	7	-	-	159.02	6	160.44	6	10,566.92	161.321	24	4.05	14,438.63	VWAP 기준 158.78 근처에서 12개 매수되었습니다
+33	6	2026-10-09	2026-10-08	153.77	138.58	8	141.80	7	158.86	6	142.04	7	143.54	7	8,595.44	153.768	38	4.05	14,438.63	VWAP 기준 140.82 근처에서 14개 매수되었습니다
+33	7	2026-10-12	2026-10-09	139.76	137.45	8	139.62	8	158.86	6	141.04	7	141.34	7	7,615.37	151.628	45	4.05	14,438.63	VWAP 기준 140.01 근처에서 7개 매수되었습니다
+33	8	2026-10-13	2026-10-12	128.40	125.61	8	128.27	8	140.75	7	128.90	8	129.90	8	5,556.17	145.614	61	4.05	14,438.63	VWAP 기준 128.7 근처에서 16개 매수되었습니다
+33	9	2026-10-14	2026-10-13	127.57	122.93	9	126.28	9	140.61	7	128.77	8	128.59	9	4,545.77	143.375	69	4.05	14,438.63	VWAP 기준 126.3 근처에서 8개 매수되었습니다
+33	10	2026-10-15	2026-10-14	110.54	108.95	10	110.42	10	128.64	8	112.73	9	113.04	10	2,519.69	136.999	87	4.05	14,438.63	VWAP 기준 112.56 근처에서 18개 매수되었습니다
+33	11	2026-10-16	2026-10-15	107.35	103.31	3	-	-	112.62	9	107.57	10	108.46	10	371.69	131.467	107	4.05	14,438.63	VWAP 기준 107.40 근처에서 20개 매수되었습니다
+33	12	2026-10-19	2026-10-16	93.67	-	-	-	-	112.62	9	107.57	10	95.75	8	86.09	130.478	110	4.05	14,438.63	VWAP 기준 95.20 근처에서 3개 매수되었습니다
+33	13	2026-10-20	2026-10-19	98.65	96.67	9	-	-	112.40	9	107.35	10	100.83	8	888.33	130.478	102	-237.53	14,197.05	VWAP 기준 100.28 근처에서 8개 매도되었습니다
+33	14	2026-10-21	2026-10-20	97.55	96.67	9	-	-	112.28	9	107.24	10	100.46	8	888.33	130.478	102	-237.53	14,197.05	아무 매매도 발생하지 않았습니다.
+33	15	2026-10-22	2026-10-21	103.24	101.10	10	-	-	112.17	9	107.14	10	104.49	9	1,715.61	130.478	94	-454.07	13,980.50	VWAP 기준 103.41 에서 8개 매도되었습니다
+33	16	2026-10-23	2026-10-22	82.11	80.46	10	-	-	112.06	9	107.03	10	84.06	9	881.51	125.952	104	-454.07	13,980.50	VWAP 기준 83.41 근처에서 10개 매수되었습니다
+33	17	2026-10-26	2026-10-23	83.56	80.46	10	-	-	112.06	9	107.03	10	84.58	9	881.51	125.952	104	-454.07	13,980.50	아무 매매도 발생하지 않았습니다.
+33	18	2026-10-27	2026-10-26	90.50	88.01	12	-	-	111.83	9	106.81	10	92.62	9	1,709.42	125.952	95	-759.73	13,674.85	VWAP 기준 91.99 근처에서 9개 매도되었습니다
+33	19	2026-10-28	2026-10-27	101.08	98.17	11	100.62	11	111.72	9	106.71	10	102.10	9	2,615.18	125.952	86	-987.54	13,447.04	VWAP 기준 100.64 에서 9개 매도되었습니다
+33	20	2026-10-29	2026-10-28	107.35	103.97	10	105.46	10	127.35	8	111.61	9	108.37	9	4,628.80	125.952	67	-1367	13,067.57	VWAP 기준 105.98 근처에서 19개 매도되었습니다
+33	21	2026-10-30	2026-10-29	102.39	99.10	11	100.97	11	111.50	9	102.65	10	103.41	9	2,599.00	120.328	87	-1367	13,067.57	VWAP 기준 101.49 근처에서 20개 매수되었습니다
+33	22	2026-11-02	2026-10-30	77.05	74.17	13	-	-	101.65	10	77.48	11	78.07	10	964.62	111.036	109	-1367	13,067.57	VWAP 기준 74.29 근처에서 22개 매수되었습니다
+33	23	2026-11-03	2026-11-02	68.17	66.02	1	-	-	101.44	10	77.33	11	69.87	11	66.19	106.569	122	-1367	13,067.57	VWAP 기준 69.11 근처에서 13개 매수되었습니다
+33	24	2026-11-04	2026-11-03	73.12	71.25	12	-	-	101.34	10	77.26	11	74.29	11	871.50	106.569	111	-1733.95	12,700.63	VWAP 기준 73.21 근처에서 11개 매도되었습니다
+33	25	2026-11-05	2026-11-04	66.68	63.57	1	-	-	101.24	10	77.18	11	68.20	11	86.34	102.555	123	-1733.95	12,700.63	VWAP 기준 65.43 근처에서 12개 매수되었습니다
+33	26	2026-11-06	2026-11-05	40.87	41.50	1	-	-	101.14	10	77.11	11	44.35	6	41.84	102.087	124	-1733.95	12,700.63	VWAP 기준 44.5 근처에서 1개 매수되었습니다
+33	27	2026-11-09	2026-11-06	45.97	44.41	7	-	-	101.14	10	77.11	11	47.17	6	318.80	102.087	118	-2069.51	12,365.07	VWAP 기준 46.16 근처에서 6개 매도되었습니다.
+33	28	2026-11-10	2026-11-09	56.20	55.14	11	-	-	65.43	6	76.96	11	57.90	6	661.46	102.087	112	-2339.37	12,095.20	VWAP 기준 57.11 근처에서 6개 매도되었습니다.
+33	29	2026-11-11	2026-11-10	56.06	54.21	9	-	-	65.42	6	76.89	11	57.28	6	496.04	100.862	115	-2339.37	12,095.20	VWAP 기준 55.14 근처에서 3개 매수되었습니다.
+33	30	2026-11-12	2026-11-11	66.03	64.33	14	-	-	-	-	76.81	11	67.40	11	1,292.72	100.862	103	-2753.04	11,681.54	VWAP 기준 66.39 근처에서 12개 매도되었습니다
+33	31	2026-11-13	2026-11-12	65.53	63.29	16	-	-	-	-	73.74	11	67.06	11	1,035.40	99.497	107	-2753.04	11,681.54	VWAP 기준 64.33 근처에서 4개 매수되었습니다.
+33	32	2026-11-16	2026-11-13	58.32	56.60	1	-	-	-	-	73.74	11	67.04	13	105.64	94.113	123	-2753.04	11,681.54	VWAP 기준 58.11 근처에서 16개 매수되었습니다.
+33	33	2026-11-17	2026-11-16	48.76	46.97	1	-	-	58.10	8	73.59	11	50.17	6	56.38	93.751	124	-2753.04	11,681.54	VWAP 기준 49.26 근처에서 1개 매수되었습니다
+33	34	2026-11-18	2026-11-17	49.07	-	-	-	-	57.95	8	73.51	11	50.59	6	9.50	93.376	125	-2753.04	11,681.54	VWAP 기준 46.88 근처에서 1개 매수되었습니다`;
+
+    function parseNumOrNull(val) {
+      if (val === undefined || val === null) return null;
+      const s = String(val).replace(/,/g, '').trim();
+      if (!s || s === '-') return null;
+      const n = Number(s);
+      return isNaN(n) ? null : n;
+    }
+
+    function parseQtyOrStr(val) {
+      if (val === undefined || val === null) return null;
+      const s = String(val).replace(/,/g, '').trim();
+      if (!s || s === '-') return null;
+      if (s.includes('남은')) return '남은전부';
+      const n = Number(s);
+      return isNaN(n) ? null : n;
+    }
+
+    function parseMemoExecutions(memo) {
+      const buys = [];
+      const sells = [];
+      if (!memo) return { buys, sells };
+      const text = String(memo);
+      const regex = /(\d+(?:\.\d+)?)(?:\s*~\s*\d+(?:\.\d+)?)?\s*(?:근처에서|사이에서|기준으로|에서|\s)\s*(\d+)\s*개(?:가|로|만|모두|전부)?\s*(?:부분)?(매수|매도)/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const price = parseFloat(match[1]);
+        const qty = parseInt(match[2], 10);
+        const side = match[3];
+        if (!isNaN(price) && !isNaN(qty) && qty > 0) {
+          if (side === '매수') buys.push({ price, qty });
+          else sells.push({ price, qty });
+        }
+      }
+      return { buys, sells };
+    }
+
+    function buildDefaultJournal() {
+      const lines = RAW_JOURNAL_TSV.trim().split('\n');
+      return lines.map((line, idx) => {
+        const c = line.split('\t');
+        const memo = (c[20] || '').trim();
+        const parsed = parseMemoExecutions(memo);
+        return {
+          id: 'j-init-' + idx,
+          cycle: Number(c[0]) || 9,
+          day: Number(c[1]) || 1,
+          date: (c[2] || '').trim(),
+          prevDate: (c[3] || '').trim(),
+          prevClose: parseNumOrNull(c[4]) || 0,
+          buyPrice1: parseNumOrNull(c[5]),
+          buyQty1: parseQtyOrStr(c[6]),
+          buyPrice2: parseNumOrNull(c[7]),
+          buyQty2: parseQtyOrStr(c[8]),
+          sellPrice1: parseNumOrNull(c[9]),
+          sellQty1: parseQtyOrStr(c[10]),
+          sellPrice2: parseNumOrNull(c[11]),
+          sellQty2: parseQtyOrStr(c[12]),
+          sellPrice3: parseNumOrNull(c[13]),
+          sellQty3: parseQtyOrStr(c[14]),
+          cash: parseNumOrNull(c[15]) || 0,
+          avgPrice: parseNumOrNull(c[16]) || 0,
+          shares: parseNumOrNull(c[17]) || 0,
+          cycleProfit: parseNumOrNull(c[18]) || 0,
+          totalFund: parseNumOrNull(c[19]) || 0,
+          memo: memo,
+          execBuyPrice: parsed.buys.length ? parsed.buys[0].price : null,
+          execBuyQty: parsed.buys.length ? parsed.buys[0].qty : null,
+          execSellPrice: parsed.sells.length ? parsed.sells[0].price : null,
+          execSellQty: parsed.sells.length ? parsed.sells[0].qty : null
+        };
+      });
+    }
+
+    function saveToCloudAndLocal() {
+      localStorage.setItem(STORAGE_KEYS.FX_DATA, JSON.stringify(fxList));
+      localStorage.setItem(STORAGE_KEYS.JOURNAL_DATA, JSON.stringify(journalList));
+      localStorage.setItem(STORAGE_KEYS.SETTINGS_DATA, JSON.stringify(settings));
+      if (db && !isRemoteUpdating) {
+        updateCloudBadge('syncing', '클라우드 동기화 저장중...');
+        db.ref('pvr7_dashboard_v1').set({
+          fxList,
+          journalList,
+          settings,
+          updatedAt: Date.now()
+        }).then(() => {
+          updateCloudBadge('connected', '클라우드 실시간 동기화됨');
+        }).catch(err => {
+          console.error('Firebase write error:', err);
+          updateCloudBadge('offline', '로컬 저장됨 (클라우드 권한 확인)');
+        });
+      }
+    }
+
+    function forcePushToCloud() {
+      if (!db) {
+        showToast('Firebase 연결이 초기화되지 않았습니다.');
+        return;
+      }
+      isRemoteUpdating = false;
+      saveToCloudAndLocal();
+      showToast('클라우드에 전체 데이터를 동기화했습니다.');
+    }
+
+    function initCloudListener() {
+      if (!db) {
+        updateCloudBadge('offline', '로컬 저장 모드');
+        return;
+      }
+      const ref = db.ref('pvr7_dashboard_v1');
+      ref.on('value', (snapshot) => {
+        const val = snapshot.val();
+        isCloudConnected = true;
+        if (val && val.journalList && Array.isArray(val.journalList) && val.journalList.length > 0) {
+          isRemoteUpdating = true;
+          fxList = Array.isArray(val.fxList) ? val.fxList : fxList;
+          journalList = val.journalList;
+          if (val.settings) {
+            settings = Object.assign({}, settings, val.settings);
+            document.getElementById('my-multiplier-input').value = settings.multiplier || 4;
+            document.getElementById('base-principal-input').value = settings.basePrincipal || 10000;
+            if (settings.todayRate) document.getElementById('fx-today-rate').value = settings.todayRate;
+            document.querySelectorAll('.chart-mult-label').forEach(el => el.innerText = settings.multiplier + '배수');
+          }
+          localStorage.setItem(STORAGE_KEYS.FX_DATA, JSON.stringify(fxList));
+          localStorage.setItem(STORAGE_KEYS.JOURNAL_DATA, JSON.stringify(journalList));
+          localStorage.setItem(STORAGE_KEYS.SETTINGS_DATA, JSON.stringify(settings));
+          renderFxDashboard();
+          renderJournalDashboard();
+          isRemoteUpdating = false;
+          updateCloudBadge('connected', '클라우드 실시간 동기화됨');
+        } else {
+          // 클라우드가 비어있으면 초기 142행 데이터를 클라우드에 최초 업로드
+          saveToCloudAndLocal();
+        }
+      }, (error) => {
+        console.error('Firebase read error:', error);
+        updateCloudBadge('offline', '클라우드 연결 오류 (로컬 모드)');
+      });
+    }
+
+    function loadAllData() {
+      try {
+        const sf = localStorage.getItem(STORAGE_KEYS.FX_DATA);
+        fxList = sf ? JSON.parse(sf) : [...INITIAL_FX_DATA];
+      } catch(e) { fxList = [...INITIAL_FX_DATA]; }
+      try {
+        const sj = localStorage.getItem(STORAGE_KEYS.JOURNAL_DATA);
+        const parsedJ = sj ? JSON.parse(sj) : null;
+        journalList = (Array.isArray(parsedJ) && parsedJ.length >= 10) ? parsedJ : buildDefaultJournal();
+      } catch(e) { journalList = buildDefaultJournal(); }
+      try {
+        const ss = localStorage.getItem(STORAGE_KEYS.SETTINGS_DATA);
+        if (ss) settings = Object.assign({}, settings, JSON.parse(ss));
+      } catch(e) {}
+    }
+
+    function switchMainTab(tabName) {
+      const btnFx = document.getElementById('tab-btn-fx');
+      const btnJournal = document.getElementById('tab-btn-journal');
+      const secFx = document.getElementById('section-fx');
+      const secJournal = document.getElementById('section-journal');
+
+      if (tabName === 'fx') {
+        btnFx.className = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-indigo-600 text-white shadow-sm";
+        btnJournal.className = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white";
+        secFx.classList.remove('hidden');
+        secJournal.classList.add('hidden');
+      } else {
+        btnJournal.className = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-indigo-600 text-white shadow-sm";
+        btnFx.className = "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition whitespace-nowrap bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white";
+        secJournal.classList.remove('hidden');
+        secFx.classList.add('hidden');
+        renderJournalDashboard();
+      }
+    }
+
+    function handleFxRateChange() {
+      settings.todayRate = Number(document.getElementById('fx-today-rate').value) || 1332.92;
+      renderFxDashboard();
+      saveToCloudAndLocal();
+    }
+
+    function renderFxDashboard() {
+      let tKrw = 0, tUsd = 0, tEx = 0, tTr = 0;
+      fxList.forEach(item => {
+        tKrw += (Number(item.krw) || 0);
+        tUsd += (Number(item.usd) || 0);
+        if (item.type === '환전') tEx += (Number(item.usd) || 0);
+        if (item.type === '외화이체') tTr += (Number(item.usd) || 0);
+      });
+      document.getElementById('fx-total-krw').innerText = '₩' + tKrw.toLocaleString();
+      document.getElementById('fx-total-usd').innerText = '$' + tUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      const rate = Number(document.getElementById('fx-today-rate').value) || 1332.92;
+      document.getElementById('fx-usd-to-krw-val').innerText = '₩' + Math.round(tUsd * rate).toLocaleString();
+      document.getElementById('fx-sub-exchange').innerText = '$' + tEx.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('fx-sub-transfer').innerText = '$' + tTr.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('badge-fx-count').innerText = fxList.length;
+
+      // 월 필터 옵션 갱신
+      const monthSel = document.getElementById('fx-month-filter');
+      const curM = monthSel.value;
+      const months = Array.from(new Set(fxList.map(x => (x.date || '').slice(0, 7)).filter(Boolean))).sort().reverse();
+      monthSel.innerHTML = '<option value="ALL">전체 월 보기</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
+      if (months.includes(curM)) monthSel.value = curM;
+
+      renderFxTable();
+    }
+
+    function renderFxTable() {
+      const tbody = document.getElementById('fx-table-body');
+      const topSummary = document.getElementById('fx-table-top-summary');
+      tbody.innerHTML = '';
+
+      const sortOrder = document.getElementById('fx-sort-order').value || 'DESC';
+      const monthFilter = document.getElementById('fx-month-filter').value || 'ALL';
+
+      let filtered = fxList.filter(item => {
+        const typeOk = fxTypeFilter === 'ALL' || item.type === fxTypeFilter;
+        const monthOk = monthFilter === 'ALL' || (item.date || '').startsWith(monthFilter);
+        return typeOk && monthOk;
+      });
+
+      filtered.sort((a, b) => sortOrder === 'DESC' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
+
+      let sumKrw = 0, sumUsd = 0;
+      filtered.forEach(item => {
+        sumKrw += (Number(item.krw) || 0);
+        sumUsd += (Number(item.usd) || 0);
+      });
+      const avgR = sumUsd > 0 && sumKrw > 0 ? '₩' + (sumKrw / sumUsd).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '-';
+      topSummary.innerHTML = `
+        <td class="py-2.5 px-4 text-center text-indigo-800 whitespace-nowrap">합계</td>
+        <td class="py-2.5 px-4 text-indigo-900 whitespace-nowrap">${filtered.length}건 조회</td>
+        <td class="py-2.5 px-4 text-right text-slate-900 whitespace-nowrap">₩${sumKrw.toLocaleString()}</td>
+        <td class="py-2.5 px-4 text-right text-indigo-700 whitespace-nowrap">$${sumUsd.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+        <td class="py-2.5 px-4 text-right hidden sm:table-cell text-slate-600 whitespace-nowrap">${avgR}</td>
+        <td class="py-2.5 px-4 text-center text-xs text-slate-500 whitespace-nowrap">상단 합계</td>
+        <td colspan="2" class="py-2.5 px-4 text-xs text-indigo-700 whitespace-nowrap">환율 적용 원화: ₩${Math.round(sumUsd * (Number(document.getElementById('fx-today-rate').value) || 1332.92)).toLocaleString()}</td>
+      `;
+
+      filtered.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition";
+        const rate = item.usd > 0 && item.krw > 0 ? (item.krw / item.usd).toFixed(2) : '-';
+        tr.innerHTML = `
+          <td class="py-3 px-4 text-center text-slate-500 font-semibold whitespace-nowrap">${idx+1}</td>
+          <td class="py-3 px-4 tabular-nums font-medium whitespace-nowrap">${item.date}</td>
+          <td class="py-3 px-4 text-right tabular-nums font-semibold whitespace-nowrap">${item.krw ? '₩' + Number(item.krw).toLocaleString() : '-'}</td>
+          <td class="py-3 px-4 text-right tabular-nums font-semibold text-indigo-700 whitespace-nowrap">${item.usd ? '$' + Number(item.usd).toLocaleString(undefined, {minimumFractionDigits:2}) : '-'}</td>
+          <td class="py-3 px-4 text-right tabular-nums hidden sm:table-cell text-slate-600 whitespace-nowrap">${rate !== '-' ? '₩' + Number(rate).toLocaleString() : '-'}</td>
+          <td class="py-3 px-4 text-center whitespace-nowrap"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${item.type==='환전'?'bg-blue-50 text-blue-700':item.type==='외화이체'?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}">${item.type}</span></td>
+          <td class="py-3 px-4 text-slate-600 text-xs whitespace-nowrap">${item.memo || ''}</td>
+          <td class="py-3 px-4 text-center whitespace-nowrap">
+            <button onclick="editFx('${item.id}')" class="text-indigo-600 hover:text-indigo-800 font-semibold text-xs mr-2">수정</button>
+            <button onclick="deleteFx('${item.id}')" class="text-rose-600 hover:text-rose-800 font-semibold text-xs">삭제</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function setFxTypeFilter(type) {
+      fxTypeFilter = type;
+      document.querySelectorAll('.fx-filter-btn').forEach(btn => {
+        if (btn.getAttribute('data-filter') === type) {
+          btn.className = "fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white transition";
+        } else {
+          btn.className = "fx-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition";
+        }
+      });
+      renderFxTable();
+    }
+
+    function handleFxSubmit(e) {
+      e.preventDefault();
+      const id = document.getElementById('fx-edit-id').value;
+      const data = {
+        id: id || 'fx-' + Date.now(),
+        date: document.getElementById('fx-date').value,
+        type: document.getElementById('fx-type').value,
+        krw: Number(document.getElementById('fx-krw').value) || 0,
+        usd: Number(document.getElementById('fx-usd').value) || 0,
+        memo: document.getElementById('fx-memo').value
+      };
+      if (id) {
+        const idx = fxList.findIndex(x => x.id === id);
+        if (idx !== -1) fxList[idx] = data;
+      } else {
+        fxList.unshift(data);
+      }
+      saveToCloudAndLocal();
+      cancelFxEdit();
+      renderFxDashboard();
+      showToast('저장 및 클라우드 동기화가 완료되었습니다.');
+    }
+
+    function editFx(id) {
+      const item = fxList.find(x => x.id === id);
+      if (!item) return;
+      document.getElementById('fx-edit-id').value = item.id;
+      document.getElementById('fx-date').value = item.date;
+      document.getElementById('fx-type').value = item.type;
+      document.getElementById('fx-krw').value = item.krw || '';
+      document.getElementById('fx-usd').value = item.usd || '';
+      document.getElementById('fx-memo').value = item.memo || '';
+      document.getElementById('fx-form-title').innerText = '이체 · 환전 내역 수정';
+      document.getElementById('fx-submit-btn').innerHTML = '<span>수정 완료</span>';
+      document.getElementById('fx-cancel-edit-btn').classList.remove('hidden');
+    }
+
+    function cancelFxEdit() {
+      document.getElementById('fx-edit-id').value = '';
+      document.getElementById('fx-form').reset();
+      document.getElementById('fx-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('fx-form-title').innerText = '새 이체 · 환전 내역 추가';
+      document.getElementById('fx-submit-btn').innerHTML = '<span>추가</span>';
+      document.getElementById('fx-cancel-edit-btn').classList.add('hidden');
+    }
+
+    function deleteFx(id) {
+      showConfirm('내역 삭제', '정말 삭제하시겠습니까?', () => {
+        fxList = fxList.filter(x => x.id !== id);
+        saveToCloudAndLocal();
+        renderFxDashboard();
+        showToast('삭제되었습니다.');
+      });
+    }
+
+    function getChronologicalJournal() {
+      return [...journalList].sort((a, b) => {
+        if (a.cycle !== b.cycle) return a.cycle - b.cycle;
+        if (a.day !== b.day) return a.day - b.day;
+        return (a.date || '').localeCompare(b.date || '');
+      });
+    }
+
+    function populateJournalCycleFilters() {
+      const chrono = getChronologicalJournal();
+      const cycles = Array.from(new Set(chrono.map(r => r.cycle))).sort((a, b) => a - b);
+      if (!cycles.length) return;
+
+      // 전체 매매기록 사이클 필터
+      const jf = document.getElementById('j-cycle-filter');
+      const curJf = jf.value;
+      jf.innerHTML = '<option value="ALL">전체 사이클</option>' + [...cycles].reverse().map(c => `<option value="${c}">${c}차 사이클</option>`).join('');
+      if (curJf === 'ALL' || cycles.includes(Number(curJf))) jf.value = curJf;
+
+      // SOXL 그래프 시작~종료 사이클 셀렉트
+      const startSel = document.getElementById('soxl-chart-start-cycle');
+      const endSel = document.getElementById('soxl-chart-end-cycle');
+      const prevStart = Number(startSel.value);
+      const prevEnd = Number(endSel.value);
+      startSel.innerHTML = cycles.map(c => `<option value="${c}">${c}차</option>`).join('');
+      endSel.innerHTML = cycles.map(c => `<option value="${c}">${c}차</option>`).join('');
+      startSel.value = cycles.includes(prevStart) ? prevStart : cycles[0];
+      endSel.value = cycles.includes(prevEnd) ? prevEnd : cycles[cycles.length - 1];
+
+      populateMavgCycleSelect();
+    }
+
+    function populateMavgCycleSelect() {
+      const chrono = getChronologicalJournal();
+      const cycles = Array.from(new Set(chrono.map(r => r.cycle))).sort((a, b) => a - b);
+      const sortOrder = document.getElementById('mavg-sort-order')?.value || 'DESC';
+      const ordered = sortOrder === 'DESC' ? [...cycles].reverse() : cycles;
+      const sel = document.getElementById('mavg-cycle-select');
+      const prevVal = Number(sel.value);
+      sel.innerHTML = ordered.map(c => `<option value="${c}">${c}차 사이클</option>`).join('');
+      if (cycles.includes(prevVal)) {
+        sel.value = prevVal;
+      } else if (ordered.length) {
+        sel.value = ordered[0];
+      }
+    }
+
+    function renderJournalDashboard() {
+      populateJournalCycleFilters();
+      renderJournalTable();
+      renderCycleSummaryTable();
+      renderJournalCharts();
+      renderSoxlChartOnly();
+      syncMavgFromSelectedCycle(false);
+      renderSnapshotSelect();
+      const chrono = getChronologicalJournal();
+      updateSnapshotDisplay(chrono.length - 1);
+    }
+
+    function formatQtyCell(val, mult) {
+      if (val === null || val === undefined || val === '') return '-';
+      if (typeof val === 'string' && val.includes('남은')) return '남은전부';
+      const n = Number(val);
+      if (isNaN(n) || n === 0) return '-';
+      return (n * mult).toLocaleString();
+    }
+
+    function renderJournalTable() {
+      const tbody = document.getElementById('journal-table-body');
+      tbody.innerHTML = '';
+      const mult = journalViewMode === 'NX' ? (Number(settings.multiplier) || 4) : 1;
+      const cycleFilter = document.getElementById('j-cycle-filter').value;
+      const sortOrder = document.getElementById('j-sort-order').value;
+
+      let rows = getChronologicalJournal().map((r, cIdx) => ({ ...r, _chronoIdx: cIdx }));
+      if (cycleFilter !== 'ALL') {
+        rows = rows.filter(r => r.cycle === Number(cycleFilter));
+      }
+      if (sortOrder === 'DESC') {
+        rows.reverse();
+      }
+
+      rows.forEach((row) => {
+        const origIdx = journalList.findIndex(x => x.id === row.id);
+        const fundVal = (Number(row.totalFund) || 0) * mult;
+        const cashVal = (Number(row.cash) || 0) * mult;
+        const cashRatio = fundVal > 0 ? ((cashVal / fundVal) * 100).toFixed(2) + '%' : '0.00%';
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition cursor-pointer";
+        tr.onclick = () => updateSnapshotDisplay(row._chronoIdx);
+        tr.innerHTML = `
+          <td class="py-2 px-2 text-center sticky-col-1 bg-white whitespace-nowrap">
+            <button onclick="event.stopPropagation(); editJournal(${origIdx})" class="text-indigo-600 hover:text-indigo-800 font-bold mr-1">수정</button>
+            <button onclick="event.stopPropagation(); deleteJournal(${origIdx})" class="text-rose-600 hover:text-rose-800 font-bold">삭제</button>
+          </td>
+          <td class="py-2 px-2 text-center font-bold sticky-col-2 bg-white whitespace-nowrap">${row.cycle}차</td>
+          <td class="py-2 px-2 text-center sticky-col-3 bg-white whitespace-nowrap">${row.day}일</td>
+          <td class="py-2 px-3 sticky-col-4 bg-white font-medium tabular-nums whitespace-nowrap">${row.date}</td>
+          <td class="py-2 px-3 text-slate-500 tabular-nums whitespace-nowrap">${row.prevDate || '-'}</td>
+          <td class="py-2 px-2.5 text-right font-semibold tabular-nums whitespace-nowrap">$${Number(row.prevClose || 0).toFixed(2)}</td>
+          <td class="py-2 px-2.5 text-right bg-rose-50/40 text-red-600 font-semibold tabular-nums whitespace-nowrap">${row.buyPrice1 ? '$'+Number(row.buyPrice1).toFixed(2) : '-'}</td>
+          <td class="py-2 px-2 text-right bg-rose-50/40 text-red-600 font-semibold tabular-nums whitespace-nowrap">${formatQtyCell(row.buyQty1, mult)}</td>
+          <td class="py-2 px-2.5 text-right bg-rose-50/40 text-red-600 font-semibold tabular-nums whitespace-nowrap">${row.buyPrice2 ? '$'+Number(row.buyPrice2).toFixed(2) : '-'}</td>
+          <td class="py-2 px-2 text-right bg-rose-50/40 text-red-600 font-semibold tabular-nums whitespace-nowrap">${formatQtyCell(row.buyQty2, mult)}</td>
+          <td class="py-2 px-2.5 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${row.sellPrice1 ? '$'+Number(row.sellPrice1).toFixed(2) : '-'}</td>
+          <td class="py-2 px-2 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${formatQtyCell(row.sellQty1, mult)}</td>
+          <td class="py-2 px-2.5 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${row.sellPrice2 ? '$'+Number(row.sellPrice2).toFixed(2) : '-'}</td>
+          <td class="py-2 px-2 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${formatQtyCell(row.sellQty2, mult)}</td>
+          <td class="py-2 px-2.5 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${row.sellPrice3 ? '$'+Number(row.sellPrice3).toFixed(2) : '-'}</td>
+          <td class="py-2 px-2 text-right bg-blue-50/40 text-blue-700 font-semibold tabular-nums whitespace-nowrap">${formatQtyCell(row.sellQty3, mult)}</td>
+          <td class="py-2 px-3 text-right font-bold text-emerald-700 bg-emerald-50/30 tabular-nums whitespace-nowrap">$${cashVal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td class="py-2 px-2.5 text-right tabular-nums whitespace-nowrap">${cashRatio}</td>
+          <td class="py-2 px-2.5 text-right font-bold tabular-nums whitespace-nowrap">${Number(row.avgPrice) > 0 ? '$'+Number(row.avgPrice).toFixed(3) : '$0'}</td>
+          <td class="py-2 px-2.5 text-right font-semibold tabular-nums whitespace-nowrap">${((Number(row.shares) || 0) * mult).toLocaleString()}</td>
+          <td class="py-2 px-3 text-right font-bold ${(Number(row.cycleProfit)||0)>=0?'text-blue-600':'text-rose-600'} tabular-nums whitespace-nowrap">$${((Number(row.cycleProfit) || 0) * mult).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td class="py-2 px-3 text-right font-bold text-indigo-700 bg-indigo-50/30 tabular-nums whitespace-nowrap">$${fundVal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td class="py-2 px-3 font-medium bg-emerald-50/40 text-emerald-950 whitespace-nowrap">${row.memo || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      document.getElementById('badge-journal-count').innerText = journalList.length;
+    }
+
+    function computeCycleSummaries() {
+      const chrono = getChronologicalJournal();
+      const map = new Map();
+      chrono.forEach(r => {
+        if (!map.has(r.cycle)) map.set(r.cycle, []);
+        map.get(r.cycle).push(r);
+      });
+      const cycles = Array.from(map.keys()).sort((a, b) => a - b);
+      const lastCycle = cycles[cycles.length - 1];
+      const baseP = Number(settings.basePrincipal) || 10000;
+
+      const results = [];
+      let prevEndFund = baseP;
+      cycles.forEach(c => {
+        const list = map.get(c);
+        const first = list[0];
+        const last = list[list.length - 1];
+        const closes = list.map(x => Number(x.prevClose) || 0).filter(v => v > 0);
+        const avgs = list.map(x => Number(x.avgPrice) || 0).filter(v => v > 0);
+        const isOngoing = (c === lastCycle && (Number(last.shares) || 0) > 0);
+        const profit1x = Number(last.cycleProfit) || 0;
+        const cycleRet = prevEndFund > 0 ? (profit1x / prevEndFund) * 100 : 0;
+        const endFund = (Number(last.totalFund) || prevEndFund);
+        const cumRet = ((endFund - baseP) / baseP) * 100;
+        prevEndFund = endFund;
+
+        results.push({
+          cycle: c,
+          start: first.date,
+          days: isOngoing ? `진행중 (${list.length}일차)` : `${list.length}일`,
+          startSoxl: Number(first.prevClose) || 0,
+          endSoxl: Number(last.prevClose) || 0,
+          minSoxl: closes.length ? Math.min(...closes) : 0,
+          maxSoxl: closes.length ? Math.max(...closes) : 0,
+          minAvg: avgs.length ? Math.min(...avgs) : 0,
+          maxAvg: avgs.length ? Math.max(...avgs) : 0,
+          profit1x,
+          cycleRet,
+          cumRet
+        });
+      });
+      return results;
+    }
+
+    function renderCycleSummaryTable() {
+      const tbody = document.getElementById('cycle-summary-body');
+      tbody.innerHTML = '';
+      const sortOrder = document.getElementById('cycle-summary-sort')?.value || 'DESC';
+      let summaries = computeCycleSummaries();
+      if (sortOrder === 'DESC') summaries = [...summaries].reverse();
+
+      summaries.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition text-center";
+        tr.innerHTML = `
+          <td class="py-2 px-2 font-bold text-slate-900 border-r border-slate-200 whitespace-nowrap">${item.cycle}차</td>
+          <td class="py-2 px-2 tabular-nums text-slate-700 border-r border-slate-200 whitespace-nowrap">${item.start}</td>
+          <td class="py-2 px-2 tabular-nums text-slate-600 border-r border-slate-200 whitespace-nowrap">${item.days}</td>
+          <td class="py-2 px-2 tabular-nums text-slate-800 border-r border-slate-200 whitespace-nowrap">$${item.startSoxl.toFixed(2)}</td>
+          <td class="py-2 px-2 tabular-nums text-slate-800 border-r border-slate-200 whitespace-nowrap">$${item.endSoxl.toFixed(2)}</td>
+          <td class="py-2 px-2 tabular-nums text-sky-700 font-semibold border-r border-slate-200 whitespace-nowrap">$${item.minSoxl.toFixed(2)}</td>
+          <td class="py-2 px-2 tabular-nums text-indigo-700 font-semibold border-r border-slate-200 whitespace-nowrap">$${item.maxSoxl.toFixed(2)}</td>
+          <td class="py-2 px-2 tabular-nums text-slate-800 border-r border-slate-200 whitespace-nowrap">${item.minAvg > 0 ? '$'+item.minAvg.toFixed(3) : '-'}</td>
+          <td class="py-2 px-2 tabular-nums text-slate-800 border-r border-slate-200 whitespace-nowrap">${item.maxAvg > 0 ? '$'+item.maxAvg.toFixed(3) : '-'}</td>
+          <td class="py-2 px-2 tabular-nums font-bold ${item.profit1x>=0?'text-blue-600':'text-rose-600'} border-r border-slate-200 whitespace-nowrap">$${item.profit1x.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td class="py-2 px-2 tabular-nums font-bold ${item.cycleRet>=0?'text-blue-600':'text-rose-600'} border-r border-slate-200 whitespace-nowrap">${item.cycleRet>0?'+':''}${item.cycleRet.toFixed(2)}%</td>
+          <td class="py-2 px-2 tabular-nums font-bold ${item.cumRet>=0?'text-indigo-700':'text-rose-600'} whitespace-nowrap">${item.cumRet>=0?'+':''}${item.cumRet.toFixed(2)}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderJournalCharts() {
+      const ctx = document.getElementById('cycle-perf-chart');
+      if (!ctx) return;
+      if (cyclePerfChartInstance) cyclePerfChartInstance.destroy();
+
+      const summaries = computeCycleSummaries();
+      const mult = Number(settings.multiplier) || 4;
+      const labels = summaries.map(s => s.cycle + '차');
+      const profits = summaries.map(s => Number((s.profit1x * mult).toFixed(2)));
+      const cumReturns = summaries.map(s => Number(s.cumRet.toFixed(2)));
+
+      cyclePerfChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: `실현수익 (${mult}배수 $)`,
+              data: profits,
+              backgroundColor: profits.map(p => p >= 0 ? 'rgba(37, 99, 235, 0.75)' : 'rgba(225, 29, 72, 0.75)'),
+              borderRadius: 4,
+              yAxisID: 'y'
+            },
+            {
+              label: '누적 수익률 (%)',
+              data: cumReturns,
+              type: 'line',
+              borderColor: '#7c3aed',
+              backgroundColor: '#7c3aed',
+              borderWidth: 2,
+              pointRadius: 2,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { position: 'left', grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+            y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 10 } } },
+            x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    function handleSoxlRangeChange(changedEnd) {
+      const startSel = document.getElementById('soxl-chart-start-cycle');
+      const endSel = document.getElementById('soxl-chart-end-cycle');
+      let s = Number(startSel.value);
+      let e = Number(endSel.value);
+      if (s > e) {
+        if (changedEnd === 'start') endSel.value = s;
+        else startSel.value = e;
+      }
+      renderSoxlChartOnly();
+    }
+
+    function setSoxlQuickRange(mode) {
+      const chrono = getChronologicalJournal();
+      const cycles = Array.from(new Set(chrono.map(r => r.cycle))).sort((a, b) => a - b);
+      if (!cycles.length) return;
+      const startSel = document.getElementById('soxl-chart-start-cycle');
+      const endSel = document.getElementById('soxl-chart-end-cycle');
+      const maxC = cycles[cycles.length - 1];
+      if (mode === 'ALL') {
+        startSel.value = cycles[0];
+        endSel.value = maxC;
+      } else if (mode === 'RECENT5') {
+        startSel.value = cycles[Math.max(0, cycles.length - 5)];
+        endSel.value = maxC;
+      } else if (mode === 'CURRENT') {
+        startSel.value = maxC;
+        endSel.value = maxC;
+      }
+      renderSoxlChartOnly();
+    }
+
+    function renderSoxlChartOnly() {
+      const ctx = document.getElementById('daily-asset-chart');
+      if (!ctx) return;
+      if (soxlChartInstance) soxlChartInstance.destroy();
+
+      const startC = Number(document.getElementById('soxl-chart-start-cycle').value) || 9;
+      const endC = Number(document.getElementById('soxl-chart-end-cycle').value) || 33;
+      document.getElementById('soxl-chart-range-badge').innerText = `${startC}차 ~ ${endC}차`;
+
+      const filtered = getChronologicalJournal().filter(r => r.cycle >= startC && r.cycle <= endC);
+      const labels = filtered.map(r => `${r.cycle}-${r.day} (${r.date.slice(5)})`);
+      const closeData = filtered.map(r => Number(r.prevClose) || 0);
+      const avgData = filtered.map(r => Number(r.avgPrice) > 0 ? Number(r.avgPrice) : null);
+      const cashRatioData = filtered.map(r => {
+        const tf = Number(r.totalFund) || 0;
+        const c = Number(r.cash) || 0;
+        return tf > 0 ? Number(((c / tf) * 100).toFixed(2)) : 0;
+      });
+
+      soxlChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'SOXL 종가 ($)',
+              data: closeData,
+              borderColor: '#0f172a',
+              backgroundColor: '#0f172a',
+              borderWidth: 2,
+              pointRadius: filtered.length > 60 ? 0 : 2,
+              tension: 0.15,
+              yAxisID: 'y'
+            },
+            {
+              label: '내 평단 ($)',
+              data: avgData,
+              type: 'bar',
+              backgroundColor: 'rgba(250, 204, 21, 0.85)',
+              borderColor: '#eab308',
+              borderWidth: 1,
+              yAxisID: 'y'
+            },
+            {
+              label: '잔금비율 (%)',
+              data: cashRatioData,
+              borderColor: '#2563eb',
+              backgroundColor: 'rgba(37, 99, 235, 0.1)',
+              borderWidth: 2,
+              pointRadius: filtered.length > 60 ? 0 : 2,
+              tension: 0.15,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: { position: 'left', grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+            y1: { position: 'right', min: 0, max: 105, grid: { display: false }, ticks: { font: { size: 10 }, callback: v => v + '%' } },
+            x: { grid: { display: false }, ticks: { font: { size: 9 }, maxTicksLimit: 12 } }
+          }
+        }
+      });
+    }
+
+    function handleMavgCycleChange() {
+      syncMavgFromSelectedCycle(true);
+    }
+
+    function syncMavgFromSelectedCycle(showMsg) {
+      const cycleNum = Number(document.getElementById('mavg-cycle-select').value) || 33;
+      const rows = getChronologicalJournal().filter(r => r.cycle === cycleNum);
+      if (rows.length) {
+        const last = rows[rows.length - 1];
+        document.getElementById('mavg-acct-avg').value = Number(last.avgPrice || 0).toFixed(3);
+        document.getElementById('mavg-cur-price').value = Number(last.prevClose || 0).toFixed(2);
+      }
+      renderMavgSection();
+      if (showMsg) showToast(`${cycleNum}차 사이클 기준으로 동기화했습니다.`);
+    }
+
+    function renderMavgSection() {
+      const cycleNum = Number(document.getElementById('mavg-cycle-select').value) || 33;
+      document.getElementById('mavg-cycle-badge').innerText = `${cycleNum}차 사이클 기준`;
+      const rows = getChronologicalJournal().filter(r => r.cycle === cycleNum);
+      const mult = Number(settings.multiplier) || 4;
+
+      const buyEvents = [];
+      const sellEvents = [];
+      rows.forEach(r => {
+        const parsed = parseMemoExecutions(r.memo);
+        if (parsed.buys.length) {
+          parsed.buys.forEach(b => buyEvents.push({ date: r.date, price: b.price, qty: b.qty * mult }));
+        } else if (r.execBuyPrice && r.execBuyQty) {
+          buyEvents.push({ date: r.date, price: Number(r.execBuyPrice), qty: Number(r.execBuyQty) * mult });
+        }
+        if (parsed.sells.length) {
+          parsed.sells.forEach(s => sellEvents.push({ date: r.date, price: s.price, qty: s.qty * mult }));
+        } else if (r.execSellPrice && r.execSellQty) {
+          sellEvents.push({ date: r.date, price: Number(r.execSellPrice), qty: Number(r.execSellQty) * mult });
+        }
+      });
+
+      let totBuyQty = 0, totBuyAmt = 0;
+      buyEvents.forEach(b => { totBuyQty += b.qty; totBuyAmt += b.price * b.qty; });
+      let totSellQty = 0, totSellAmt = 0;
+      sellEvents.forEach(s => { totSellQty += s.qty; totSellAmt += s.price * s.qty; });
+
+      document.getElementById('mavg-buy-agg').innerText = `${buyEvents.length}회 / ${totBuyQty.toLocaleString()}주 / $${totBuyAmt.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('mavg-sell-agg').innerText = `${sellEvents.length}회 / ${totSellQty.toLocaleString()}주 / $${totSellAmt.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+      const acctAvg = Number(document.getElementById('mavg-acct-avg').value) || 0;
+      const curPrice = Number(document.getElementById('mavg-cur-price').value) || 0;
+      const lastRow = rows[rows.length - 1];
+      const heldShares = lastRow ? (Number(lastRow.shares) || 0) * mult : Math.max(0, totBuyQty - totSellQty);
+      const realizedPnl = lastRow ? (Number(lastRow.cycleProfit) || 0) * mult : 0;
+
+      const cycleBreakEven = heldShares > 0 ? Math.max(0, (heldShares * acctAvg - realizedPnl) / heldShares) : 0;
+      const unrealizedPnl = heldShares * (curPrice - acctAvg);
+      const unrealizedPct = acctAvg > 0 ? ((curPrice - acctAvg) / acctAvg) * 100 : 0;
+      const realizedPct = totBuyAmt > 0 ? (realizedPnl / totBuyAmt) * 100 : 0;
+
+      document.getElementById('mavg-k7-cycle-be').innerText = heldShares > 0 ? '$' + cycleBreakEven.toFixed(2) : '보유 0주';
+      document.getElementById('mavg-k8-acct-be').innerText = acctAvg > 0 ? '$' + acctAvg.toFixed(3) : '-';
+      document.getElementById('mavg-k8-unrealized').innerText = heldShares > 0 ? `현재가 평가손익: ${unrealizedPnl>=0?'+':''}$${unrealizedPnl.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})} (${unrealizedPct>=0?'+':''}${unrealizedPct.toFixed(2)}%)` : '사이클 종료 (보유 0주)';
+      document.getElementById('mavg-k4-realized-pnl').innerText = `${realizedPnl>=0?'+':''}$${realizedPnl.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+      document.getElementById('mavg-k5-realized-pct').innerText = `${realizedPct>=0?'+':''}${realizedPct.toFixed(2)}%`;
+
+      const bTbody = document.getElementById('mavg-buy-tbody');
+      bTbody.innerHTML = buyEvents.length ? buyEvents.map((b, i) => `
+        <tr class="hover:bg-rose-50/40">
+          <td class="py-2 px-3 text-center text-slate-500">${i+1}</td>
+          <td class="py-2 px-3">${b.date}</td>
+          <td class="py-2 px-3 text-right font-semibold text-red-600">$${b.price.toFixed(2)}</td>
+          <td class="py-2 px-3 text-right font-semibold text-red-600">${b.qty.toLocaleString()}</td>
+          <td class="py-2 px-3 text-right font-bold">$${(b.price * b.qty).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="5" class="py-4 text-center text-slate-400">해당 사이클 매수 체결 내역이 없습니다.</td></tr>`;
+
+      const sTbody = document.getElementById('mavg-sell-tbody');
+      sTbody.innerHTML = sellEvents.length ? sellEvents.map((s, i) => `
+        <tr class="hover:bg-blue-50/40">
+          <td class="py-2 px-3 text-center text-slate-500">${i+1}</td>
+          <td class="py-2 px-3">${s.date}</td>
+          <td class="py-2 px-3 text-right font-semibold text-blue-700">$${s.price.toFixed(2)}</td>
+          <td class="py-2 px-3 text-right font-semibold text-blue-700">${s.qty.toLocaleString()}</td>
+          <td class="py-2 px-3 text-right font-bold">$${(s.price * s.qty).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="5" class="py-4 text-center text-slate-400">해당 사이클 매도 체결 내역이 없습니다.</td></tr>`;
+    }
+
+    function renderSnapshotSelect() {
+      const sel = document.getElementById('snapshot-row-select');
+      if (!sel) return;
+      const chrono = getChronologicalJournal();
+      sel.innerHTML = '';
+      for (let i = chrono.length - 1; i >= 0; i--) {
+        const row = chrono[i];
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = `${row.cycle}차 ${row.day}일 (${row.date})`;
+        sel.appendChild(opt);
+      }
+    }
+
+    function updateSnapshotDisplay(chronoIdx) {
+      const chrono = getChronologicalJournal();
+      const row = chrono[chronoIdx];
+      if (!row) return;
+      currentSelectedJournalIndex = chronoIdx;
+      const sel = document.getElementById('snapshot-row-select');
+      if (sel) sel.value = chronoIdx;
+
+      const mult = Number(settings.multiplier) || 4;
+      const cycleRows = chrono.filter(r => r.cycle === row.cycle);
+      const startDate = cycleRows.length ? cycleRows[0].date.replace(/-/g, '/') : row.date.replace(/-/g, '/');
+
+      document.getElementById('cap-trade-date').innerText = (row.date || '').replace(/-/g, '/');
+      document.getElementById('cap-cycle-day').innerText = `${row.cycle}차  ${row.day}거래일`;
+      document.getElementById('cap-cycle-start').innerText = startDate;
+      document.getElementById('cap-close-date').innerText = (row.prevDate || '').replace(/-/g, '/');
+
+      document.getElementById('cap-buy-p1').innerText = row.buyPrice1 ? Number(row.buyPrice1).toFixed(2) : '-';
+      document.getElementById('cap-buy-q1').innerText = formatQtyCell(row.buyQty1, mult);
+      document.getElementById('cap-buy-p2').innerText = row.buyPrice2 ? Number(row.buyPrice2).toFixed(2) : '-';
+      document.getElementById('cap-buy-q2').innerText = formatQtyCell(row.buyQty2, mult);
+
+      document.getElementById('cap-sell-p1').innerText = row.sellPrice1 ? Number(row.sellPrice1).toFixed(2) : '-';
+      document.getElementById('cap-sell-q1').innerText = formatQtyCell(row.sellQty1, mult);
+      document.getElementById('cap-sell-p2').innerText = row.sellPrice2 ? Number(row.sellPrice2).toFixed(2) : '-';
+      document.getElementById('cap-sell-q2').innerText = formatQtyCell(row.sellQty2, mult);
+      document.getElementById('cap-sell-p3').innerText = row.sellPrice3 ? Number(row.sellPrice3).toFixed(2) : '-';
+      document.getElementById('cap-sell-q3').innerText = formatQtyCell(row.sellQty3, mult);
+
+      document.getElementById('cap-prev-close').innerText = Number(row.prevClose || 0).toFixed(2);
+      document.getElementById('cap-avg-price').innerText = Number(row.avgPrice || 0).toFixed(2);
+      document.getElementById('cap-held-shares').innerText = ((Number(row.shares) || 0) * mult).toLocaleString();
+      const cashV = (Number(row.cash) || 0) * mult;
+      const fundV = (Number(row.totalFund) || 0) * mult;
+      document.getElementById('cap-cash').innerText = cashV.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('cap-cash-ratio').innerText = fundV > 0 ? ((cashV / fundV) * 100).toFixed(2) + '%' : '0.00%';
+      document.getElementById('cap-cycle-profit').innerText = ((Number(row.cycleProfit) || 0) * mult).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('cap-principal-plus-profit').innerText = fundV.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('cap-memo-text').innerText = row.memo || '체결 내역 없음';
+    }
+
+    function handleSnapshotSelect() {
+      const idx = Number(document.getElementById('snapshot-row-select').value);
+      updateSnapshotDisplay(idx);
+    }
+
+    function setQuickMultiplier(m) {
+      settings.multiplier = m;
+      document.getElementById('my-multiplier-input').value = m;
+      document.querySelectorAll('.chart-mult-label').forEach(el => el.innerText = m + '배수');
+      saveToCloudAndLocal();
+      renderJournalTable();
+      renderJournalCharts();
+      renderMavgSection();
+      updateSnapshotDisplay(currentSelectedJournalIndex);
+      showToast(`${m}배수로 변경되었습니다.`);
+    }
+
+    function adjustMultiplier(delta) {
+      let m = (Number(document.getElementById('my-multiplier-input').value) || 4) + delta;
+      if (m < 0.5) m = 0.5;
+      document.getElementById('my-multiplier-input').value = m;
+      setQuickMultiplier(m);
+    }
+
+    function handleMultiplierChange() {
+      const m = Number(document.getElementById('my-multiplier-input').value) || 4;
+      settings.basePrincipal = Number(document.getElementById('base-principal-input').value) || 10000;
+      setQuickMultiplier(m);
+    }
+
+    function setJournalViewMode(mode) {
+      journalViewMode = mode;
+      if (mode === '1X') {
+        document.getElementById('view-mode-1x').className = "px-3 py-1.5 rounded-lg font-bold bg-white text-slate-900 shadow-2xs transition";
+        document.getElementById('view-mode-nx').className = "px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition";
+      } else {
+        document.getElementById('view-mode-nx').className = "px-3 py-1.5 rounded-lg font-bold bg-white text-slate-900 shadow-2xs transition";
+        document.getElementById('view-mode-1x').className = "px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 transition";
+      }
+      renderJournalTable();
+    }
+
+    function updateAutoDayBadge() {
+      const c = Number(document.getElementById('j-col-a').value) || 33;
+      const sameRows = getChronologicalJournal().filter(r => r.cycle === c);
+      const nextDay = sameRows.length + 1;
+      document.getElementById('j-auto-day-badge').innerText = `자동 ${nextDay}거래일`;
+    }
+
+    function setNextJournalDefaults() {
+      const chrono = getChronologicalJournal();
+      const last = chrono[chrono.length - 1];
+      if (!last) return;
+      document.getElementById('j-edit-index').value = '-1';
+      document.getElementById('j-col-a').value = last.cycle;
+      const todayStr = new Date().toISOString().split('T')[0];
+      document.getElementById('j-col-c').value = todayStr;
+      document.getElementById('j-col-d').value = last.date;
+      document.getElementById('j-col-p').value = last.cash;
+      document.getElementById('j-col-q').value = last.avgPrice;
+      document.getElementById('j-col-r').value = last.shares;
+      document.getElementById('j-col-s').value = last.cycleProfit;
+      document.getElementById('j-col-t').value = last.totalFund;
+      updateAutoDayBadge();
+      showToast(`${last.cycle}차 다음 거래일 기본값을 세팅했습니다.`);
+    }
+
+    function startNewCycleDefaults() {
+      const chrono = getChronologicalJournal();
+      const last = chrono[chrono.length - 1];
+      const nextCycle = last ? last.cycle + 1 : 34;
+      document.getElementById('j-edit-index').value = '-1';
+      document.getElementById('j-col-a').value = nextCycle;
+      document.getElementById('j-col-c').value = new Date().toISOString().split('T')[0];
+      document.getElementById('j-col-d').value = last ? last.date : '';
+      document.getElementById('j-col-p').value = last ? last.totalFund : 10000;
+      document.getElementById('j-col-q').value = 0;
+      document.getElementById('j-col-r').value = 0;
+      document.getElementById('j-col-s').value = 0;
+      document.getElementById('j-col-t').value = last ? last.totalFund : 10000;
+      updateAutoDayBadge();
+      showToast(`${nextCycle}차 새 사이클 시작 기본값을 세팅했습니다.`);
+    }
+
+    function autoCalcJournalForm(forceToast = false) {
+      const bq1 = Number(document.getElementById('j-col-g').value) || 0;
+      const bq2 = Number(document.getElementById('j-col-i').value) || 0;
+      const sq1 = Number(document.getElementById('j-col-k').value) || 0;
+      const sq2 = Number(document.getElementById('j-col-m').value) || 0;
+      const sq3 = Number(document.getElementById('j-col-o').value) || 0;
+      document.getElementById('j-preview-buy-sum').innerText = `${bq1 + bq2}주`;
+      document.getElementById('j-preview-sell-sum').innerText = `${sq1 + sq2 + sq3}주`;
+
+      const c = Number(document.getElementById('j-col-a').value) || 33;
+      const sameRows = getChronologicalJournal().filter(r => r.cycle === c);
+      const prev = sameRows[sameRows.length - 1];
+      if (!prev) return;
+
+      let cash = Number(prev.cash) || 0;
+      let shares = Number(prev.shares) || 0;
+      let avg = Number(prev.avgPrice) || 0;
+      let profit = Number(prev.cycleProfit) || 0;
+      let fund = Number(prev.totalFund) || 0;
+
+      const ebP = Number(document.getElementById('j-exec-buy-price').value) || 0;
+      const ebQ = Number(document.getElementById('j-exec-buy-qty').value) || 0;
+      const esP = Number(document.getElementById('j-exec-sell-price').value) || 0;
+      const esQ = Number(document.getElementById('j-exec-sell-qty').value) || 0;
+
+      if (esP > 0 && esQ > 0) {
+        const sellAmt = esP * esQ;
+        const realized = (esP - avg) * esQ;
+        cash += sellAmt;
+        shares = Math.max(0, shares - esQ);
+        profit += realized;
+        fund += realized;
+        if (shares === 0) avg = 0;
+      }
+      if (ebP > 0 && ebQ > 0) {
+        const buyAmt = ebP * ebQ;
+        avg = (shares * avg + buyAmt) / (shares + ebQ);
+        shares += ebQ;
+        cash -= buyAmt;
+      }
+
+      document.getElementById('j-col-p').value = cash.toFixed(2);
+      document.getElementById('j-col-q').value = avg.toFixed(3);
+      document.getElementById('j-col-r').value = shares;
+      document.getElementById('j-col-s').value = profit.toFixed(2);
+      document.getElementById('j-col-t').value = fund.toFixed(2);
+      if (forceToast) showToast('실제 체결 기준으로 1배수 정산값을 자동 계산했습니다.');
+    }
+
+    function handleJournalSubmit(e) {
+      e.preventDefault();
+      const editIdx = Number(document.getElementById('j-edit-index').value);
+      const cycle = Number(document.getElementById('j-col-a').value) || 33;
+      const sameRows = getChronologicalJournal().filter(r => r.cycle === cycle);
+      const ebP = parseNumOrNull(document.getElementById('j-exec-buy-price').value);
+      const ebQ = parseNumOrNull(document.getElementById('j-exec-buy-qty').value);
+      const esP = parseNumOrNull(document.getElementById('j-exec-sell-price').value);
+      const esQ = parseNumOrNull(document.getElementById('j-exec-sell-qty').value);
+
+      let memoParts = [];
+      if (ebP && ebQ) memoParts.push(`VWAP 기준 ${ebP} 근처에서 ${ebQ}개 매수되었습니다`);
+      if (esP && esQ) memoParts.push(`VWAP 기준 ${esP} 근처에서 ${esQ}개 매도되었습니다`);
+      const autoMemo = memoParts.length ? memoParts.join(' / ') : '아무 매매도 발생하지 않았습니다.';
+
+      const existing = editIdx >= 0 ? journalList[editIdx] : null;
+      const row = {
+        id: existing ? existing.id : 'j-' + Date.now(),
+        cycle,
+        day: existing ? existing.day : sameRows.length + 1,
+        date: document.getElementById('j-col-c').value,
+        prevDate: document.getElementById('j-col-d').value,
+        prevClose: Number(document.getElementById('j-col-e').value) || 0,
+        buyPrice1: parseNumOrNull(document.getElementById('j-col-f').value),
+        buyQty1: parseNumOrNull(document.getElementById('j-col-g').value),
+        buyPrice2: parseNumOrNull(document.getElementById('j-col-h').value),
+        buyQty2: parseNumOrNull(document.getElementById('j-col-i').value),
+        sellPrice1: parseNumOrNull(document.getElementById('j-col-j').value),
+        sellQty1: parseNumOrNull(document.getElementById('j-col-k').value),
+        sellPrice2: parseNumOrNull(document.getElementById('j-col-l').value),
+        sellQty2: parseNumOrNull(document.getElementById('j-col-m').value),
+        sellPrice3: parseNumOrNull(document.getElementById('j-col-n').value),
+        sellQty3: parseNumOrNull(document.getElementById('j-col-o').value),
+        cash: Number(document.getElementById('j-col-p').value) || 0,
+        avgPrice: Number(document.getElementById('j-col-q').value) || 0,
+        shares: Number(document.getElementById('j-col-r').value) || 0,
+        cycleProfit: Number(document.getElementById('j-col-s').value) || 0,
+        totalFund: Number(document.getElementById('j-col-t').value) || 0,
+        execBuyPrice: ebP,
+        execBuyQty: ebQ,
+        execSellPrice: esP,
+        execSellQty: esQ,
+        memo: existing && !memoParts.length ? existing.memo : autoMemo
+      };
+
+      if (editIdx >= 0) {
+        journalList[editIdx] = row;
+      } else {
+        journalList.push(row);
+      }
+
+      saveToCloudAndLocal();
+      cancelJournalEdit();
+      renderJournalDashboard();
+      showToast(editIdx >= 0 ? '일지가 수정 및 클라우드 동기화되었습니다.' : '새 일지가 추가 및 클라우드 동기화되었습니다.');
+    }
+
+    function editJournal(idx) {
+      const r = journalList[idx];
+      if (!r) return;
+      document.getElementById('j-edit-index').value = idx;
+      document.getElementById('j-col-a').value = r.cycle;
+      document.getElementById('j-col-c').value = r.date;
+      document.getElementById('j-col-d').value = r.prevDate || '';
+      document.getElementById('j-col-e').value = r.prevClose || '';
+      document.getElementById('j-col-f').value = r.buyPrice1 || '';
+      document.getElementById('j-col-g').value = typeof r.buyQty1 === 'number' ? r.buyQty1 : '';
+      document.getElementById('j-col-h').value = r.buyPrice2 || '';
+      document.getElementById('j-col-i').value = typeof r.buyQty2 === 'number' ? r.buyQty2 : '';
+      document.getElementById('j-col-j').value = r.sellPrice1 || '';
+      document.getElementById('j-col-k').value = typeof r.sellQty1 === 'number' ? r.sellQty1 : '';
+      document.getElementById('j-col-l').value = r.sellPrice2 || '';
+      document.getElementById('j-col-m').value = typeof r.sellQty2 === 'number' ? r.sellQty2 : '';
+      document.getElementById('j-col-n').value = r.sellPrice3 || '';
+      document.getElementById('j-col-o').value = typeof r.sellQty3 === 'number' ? r.sellQty3 : '';
+      document.getElementById('j-exec-buy-price').value = r.execBuyPrice || '';
+      document.getElementById('j-exec-buy-qty').value = r.execBuyQty || '';
+      document.getElementById('j-exec-sell-price').value = r.execSellPrice || '';
+      document.getElementById('j-exec-sell-qty').value = r.execSellQty || '';
+      document.getElementById('j-col-p').value = r.cash;
+      document.getElementById('j-col-q').value = r.avgPrice;
+      document.getElementById('j-col-r').value = r.shares;
+      document.getElementById('j-col-s').value = r.cycleProfit;
+      document.getElementById('j-col-t').value = r.totalFund;
+      document.getElementById('j-form-title').innerText = `${r.cycle}차 ${r.day}거래일 수정 중`;
+      document.getElementById('j-submit-btn').innerHTML = '<span>수정 완료</span>';
+      document.getElementById('j-cancel-edit-btn').classList.remove('hidden');
+      document.getElementById('journal-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function cancelJournalEdit() {
+      document.getElementById('j-edit-index').value = '-1';
+      document.getElementById('journal-form').reset();
+      document.getElementById('j-form-title').innerText = '일지 입력 폼';
+      document.getElementById('j-submit-btn').innerHTML = '<span>일지 추가</span>';
+      document.getElementById('j-cancel-edit-btn').classList.add('hidden');
+    }
+
+    function deleteJournal(idx) {
+      showConfirm('일지 삭제', '선택한 매매기록을 삭제하시겠습니까?', () => {
+        journalList.splice(idx, 1);
+        saveToCloudAndLocal();
+        renderJournalDashboard();
+        showToast('삭제되었습니다.');
+      });
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = "bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-lg border border-slate-700";
+      toast.innerText = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function showConfirm(title, msg, onOk) {
+      document.getElementById('confirm-title').innerText = title;
+      document.getElementById('confirm-message').innerText = msg;
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('confirm-ok-btn').onclick = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        onOk();
+      };
+      document.getElementById('confirm-cancel-btn').onclick = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+    }
+
+    function exportJSON() {
+      const data = { fxList, journalList, settings };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pvr7_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    }
+
+    function importJSON(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          if (parsed.fxList) fxList = parsed.fxList;
+          if (parsed.journalList) journalList = parsed.journalList;
+          if (parsed.settings) settings = Object.assign({}, settings, parsed.settings);
+          saveToCloudAndLocal();
+          renderFxDashboard();
+          renderJournalDashboard();
+          showToast('JSON 불러오기 및 클라우드 반영이 완료되었습니다.');
+        } catch(err) {
+          showToast('JSON 파일 형식이 올바르지 않습니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function confirmResetAll() {
+      showConfirm('초기값 리셋', '9~33사이클 원본 데이터(142행)로 리셋하고 클라우드에도 반영하시겠습니까?', () => {
+        fxList = [...INITIAL_FX_DATA];
+        journalList = buildDefaultJournal();
+        settings = { multiplier: 4, basePrincipal: 10000, todayRate: 1332.92 };
+        saveToCloudAndLocal();
+        renderFxDashboard();
+        renderJournalDashboard();
+        showToast('원본 데이터로 초기화되었습니다.');
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('fx-date').value = new Date().toISOString().split('T')[0];
+      loadAllData();
+      renderFxDashboard();
+      renderJournalDashboard();
+      setNextJournalDefaults();
+      initCloudListener();
+    });
+  </script>
+</body>
+</html>
